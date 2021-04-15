@@ -8413,7 +8413,7 @@ c_Game.prototype.p_LoadWorld=function(t_newWorld){
 			t_startIndex=t_endIndex;
 			t_endIndex=t_index;
 			this.m_mapsTxt=resize_string_array(this.m_mapsTxt,this.m_mapsTxt.length+1);
-			this.m_mapsTxt[this.m_mapsTxt.length-1]=t_mapsTxtFile.slice(t_startIndex+1,t_endIndex-1);
+			this.m_mapsTxt[this.m_mapsTxt.length-1]=t_mapsTxtFile.slice(t_startIndex+1,t_endIndex);
 		}
 	}
 	if(t_mapsTxtFile.length>0){
