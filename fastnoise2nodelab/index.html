@@ -843,7 +843,7 @@ class Preview
     let ns = this.nsMeasured[key];
     if( !ns && this.e ) ns = key === 3 ? this.e.ns3 || this.e.ns2 : this.e.ns2;
     if( !ns || !this.engine ) return null;
-    const passes = this.kind === 'proto' ? 1.33 : 1.1, samples = mode === 'vol' ? W * W * this.volSteps * ( this.volPerStep || 0.5 ) : W * ( mode === 'relief' ? Math.max( W, H ) : H );
+    const passes = this.kind === 'proto' ? 1.55 : 1.1, samples = mode === 'vol' ? W * W * this.volSteps * ( this.volPerStep || 0.5 ) : W * ( mode === 'relief' ? Math.max( W, H ) : H );
     return ns * samples * passes / this.engine.pool.size / 1e6;
   }
   sizeLabel( w, h, est ) { return ( h === w ? w + ' px' : w + ' × ' + h ) + ( est !== null && est >= 950 ? ' · about ' + fmtMs( est ) : '' ); }
