@@ -83,7 +83,7 @@ section.view > *, .stack > *, .row > * { min-width: 0; }
 /* pills and chips */
 .pill { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .02em; padding: 3px 6px; border-radius: 3px; border: 1px solid currentColor; white-space: nowrap; }
 .pill.call-ship { color: var(--ship); } .pill.call-ship-as-mode { color: var(--mode); } .pill.call-showcase { color: var(--show); } .pill.call-graph-recipe { color: var(--recipe); } .pill.call-drop { color: var(--drop); }
-.pill.st-real { background: var(--ship); color: #fff; border-color: var(--ship); } .pill.st-planned { color: var(--accent); } .pill.st-reserve { color: var(--mut); } .pill.st-recipe { color: var(--recipe); } .pill.st-dropped { color: var(--drop); text-decoration: line-through; } .pill.st-prototype { color: var(--mut); border-style: dashed; }
+.pill.st-real { background: var(--ship); color: #fff; border-color: var(--ship); } .pill.st-planned { color: var(--accent); } .pill.st-reserve { color: var(--mut); } .pill.st-recipe { color: var(--recipe); } .pill.st-dropped { color: var(--drop); text-decoration: line-through; } .pill.st-prototype { color: var(--mut); border-style: dashed; } .pill.st-proto-only { color: var(--warn); border-color: var(--warn); border-style: dashed; } .pill.st-covered { background: var(--panel2); color: var(--ship); border-color: var(--ship); } .pill.pcall { color: var(--mut); border-style: dashed; font-weight: 400; }
 .pill.kind { background: var(--panel2); border-color: var(--line2); color: var(--fg); white-space: normal; }
 .pill.kind.real { background: var(--ship); color: #fff; border-color: var(--ship); }
 .fam { display: inline-block; font-size: 12px; color: var(--mut); background: var(--panel2); padding: 2px 7px; border-radius: 10px; white-space: nowrap; }
@@ -316,7 +316,14 @@ svg .dot { opacity: .85; }
 .strip { width: 100%; height: auto; display: block; }
 
 /* trail */
-.trow { border-top: 1px solid var(--line); padding: 8px 0; display: grid; gap: 3px; }
+.trow { border-top: 1px solid var(--line); padding: 8px 0; display: grid; gap: 3px; grid-template-columns: minmax(0, 1fr); }
+.trow.withth { grid-template-columns: 112px minmax(0, 1fr); column-gap: 12px; align-items: start; }
+.trow .tth { padding: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--canvas); display: block; width: 112px; cursor: pointer; }
+.trow .tth img { display: block; width: 112px; aspect-ratio: 2 / 1; object-fit: cover; }
+.trow .tbody { display: grid; gap: 3px; min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.trow .t > * { min-width: 0; overflow-wrap: anywhere; }
+.trow .t .chip { white-space: normal; text-align: left; }
+@media (max-width: 520px) { .trow.withth { grid-template-columns: 80px minmax(0, 1fr); column-gap: 8px; } .trow .tth, .trow .tth img { width: 80px; } }
 .trow .t { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .trow .t b { font-size: 15px; }
 .srcs a { font-size: 12px; overflow-wrap: anywhere; }
@@ -369,7 +376,7 @@ const esc = s => String( s ?? '' ).replace( /[&<>"]/g, c => ( { '&': '&amp;', '<
 const fmt = ( n, d = 2 ) => n === null || n === undefined || isNaN( n ) ? '–' : ( +n ).toFixed( d );
 const WORKERS = Math.max( 1, Math.min( 3, ( navigator.hardwareConcurrency || 2 ) - 1 ) );
 const CALL_LABEL = { 'ship': 'ship', 'ship-as-mode': 'mode', 'showcase': 'showcase', 'graph-recipe': 'recipe', 'drop': 'drop' };
-const STATUS_LABEL = { real: 'real node', planned: 'planned node', reserve: 'reserve', recipe: 'graph recipe', dropped: 'dropped', prototype: 'prototype only' };
+const STATUS_LABEL = { real: 'real node', planned: 'planned node', reserve: 'reserve', recipe: 'graph recipe', dropped: 'dropped', prototype: 'judged, no plan', 'proto-only': 'prototype only, not judged', covered: 'covered by a real node' };
 const LENS_LABEL = { 'artist-terrain': 'terrain artist', 'artist-material': 'material artist', 'voxel-engineer': 'voxel engineer', 'maintainer': 'maintainer', 'graphics-researcher': 'graphics researcher', 'creative': 'creative coder' };
 
 let toastT = 0;
@@ -1258,7 +1265,9 @@ class Preview
   {
     const p = this.e.presets[i]; if( !p ) return;
     this.presetIdx = i; this.params = Object.assign( {}, p.params ); this.ctls.dataset.keys = '';
-    this.set( { proto: this.e.proto, params: p.params } ); this.showSettings();
+    const hint = this.e.view || {}, v = p.view || {}, opts = { proto: this.e.proto, params: p.params, iso: v.iso ?? hint.iso ?? 0 };
+    if( v.hscale !== undefined ) { this.hscale = v.hscale; opts.hscale = v.hscale; }
+    this.set( opts ); this.showSettings();
   }
   buildProtoControls( controls )
   {
@@ -1613,9 +1622,13 @@ function route()
 }
 
 // =================================================================== pieces
-const callPill = call => h( 'span', { class: 'pill call-' + call, title: 'critic call: ' + call }, CALL_LABEL[call] || call );
-const statusPill = it => h( 'span', { class: 'pill st-' + it.status, title: it.disp && it.disp.how ? 'plan: ' + it.disp.how : '' }, it.status === 'real' && it.absorbed ? 'in a real node' : STATUS_LABEL[it.status] || it.status );
-const famChip = f => h( 'span', { class: 'fam' }, f );
+const callPill = call => call ? h( 'span', { class: 'pill call-' + call, title: 'critic call: ' + call }, CALL_LABEL[call] || call ) : null;
+const statusPill = it => h( 'span', { class: 'pill st-' + it.status, title: it.disp && it.disp.how ? 'plan: ' + it.disp.how : '' }, it.status === 'real' && it.absorbed ? 'in a real node' : it.status === 'covered' ? 'covered by ' + it.covered_by : STATUS_LABEL[it.status] || it.status );
+const famChip = f => f ? h( 'span', { class: 'fam' }, f ) : null;
+// Judged in the tournament? Everything else has no scores, no rank and no family, and shows nothing in those places.
+const isJudged = it => it.rank !== null && it.rank !== undefined;
+const ideaLabel = it => isJudged( it ) ? '#' + it.rank + ' ' + it.name + ' (' + it.family + ')' : it.name + ' (prototype only, not judged)';
+const protoCallPill = it => it.prototyper_call ? h( 'span', { class: 'pill pcall', title: 'What the author of this prototype said about their own work. Nobody judged it.' }, 'prototyper’s call: ' + it.prototyper_call + ( it.merged_into ? ' into ' + it.merged_into : '' ) ) : null;
 function costShort( c )
 {
   if( !c || !c.text ) return h( 'span', { class: 'cost' }, 'no cost given' );
@@ -1627,12 +1640,13 @@ function ideaCard( it )
   return h( 'button', { class: 'card', onclick: () => openIdea( it.id ), 'aria-label': it.name },
     img( it.thumb, { class: 'th', alt: it.name + ' thumbnail' } ),
     h( 'div', { class: 'body' },
-      h( 'div', { class: 'name' }, h( 'span', null, it.name ), h( 'span', { class: 'num', title: 'combined score: (critic mean + panel mean) / 2' }, fmt( it.combined, 2 ) ) ),
+      h( 'div', { class: 'name' }, h( 'span', null, it.name ), isJudged( it ) ? h( 'span', { class: 'num', title: 'combined score: (critic mean + panel mean) / 2' }, fmt( it.combined, 2 ) ) : null ),
       h( 'div', { class: 'one' }, it.one_liner || '' ),
-      h( 'div', { class: 'meta' }, famChip( it.family ), callPill( it.call ), statusPill( it ), costShort( it.cost ) ) ) );
+      h( 'div', { class: 'meta' }, famChip( it.family || it.category ), callPill( it.call ), statusPill( it ), protoCallPill( it ), it.kind === 'covered' ? null : costShort( it.cost ) ) ) );
 }
 function scoreTiles( it )
 {
+  if( !isJudged( it ) ) return h( 'p', { class: 'small mut' }, it.kind === 'covered' ? 'Not judged on its own: a real node covers this idea, so it has no scores and no rank here.' : 'Not judged: no critic or panel saw this prototype, so it has no scores and no rank.' );
   const tiles = [ [ 'combined', it.combined, 10 ], [ 'critic', it.critic_mean, 10 ], [ 'panel (' + it.panel_n + ')', it.panel_mean, 10 ], [ 'rank', it.rank, null ] ];
   return h( 'div', { class: 'scores' }, tiles.map( ( [ k, v, max ] ) => h( 'div', { class: 'score' }, h( 'div', { class: 'v' }, max ? fmt( v, 2 ) : '#' + v ), h( 'div', { class: 'k' }, k ), max ? h( 'div', { class: 'bar' }, h( 'i', { style: 'width:' + ( v / max * 100 ) + '%' } ) ) : null ) ) );
 }
@@ -1670,7 +1684,7 @@ RENDER.live = async root =>
 {
   await Promise.all( [ realReady, presetsReady ] );
   const landed = landedReal(), real = landed.filter( r => r.inWasm ), notRunnable = landed.filter( r => !r.inWasm );
-  const top = D.ideas.filter( i => i.proto_ok ).slice( 0, 10 );
+  const top = D.ideas.filter( i => i.proto_ok && isJudged( i ) ).slice( 0, 10 );
   const chips = h( 'div', { class: 'chips scroll' } );
   const host = h( 'div' );
   const info = h( 'div', { class: 'box', style: 'display:grid;gap:6px' } );
@@ -1686,12 +1700,12 @@ RENDER.live = async root =>
       const it = ideaById.get( key );
       previews.live = new Preview( host, { kind: 'proto', idea: key } );
       info.textContent = '';
-      info.append( h( 'div', { class: 'row' }, h( 'h3', null, it.name ), famChip( it.family ), callPill( it.call ), statusPill( it ), h( 'span', { class: 'num mut' }, 'combined ' + fmt( it.combined ) ) ),
+      info.append( h( 'div', { class: 'row' }, h( 'h3', null, it.name ), famChip( it.family ), callPill( it.call ), statusPill( it ), protoCallPill( it ), isJudged( it ) ? h( 'span', { class: 'num mut' }, 'combined ' + fmt( it.combined ) ) : null ),
         h( 'p', null, it.one_liner ),
-        h( 'p', { class: 'small mut' }, 'Scalar prototype compiled to WASM, running at its judged parameters. Sliders are the parameters the prototype reads; only moved ones are sent. ',
+        h( 'p', { class: 'small mut' }, 'Scalar prototype compiled to WASM, running at its ' + ( isJudged( it ) ? 'judged' : 'plain, not judged,' ) + ' parameters. Sliders are the parameters the prototype reads; only moved ones are sent. ',
           it.cost && it.cost.text ? 'Cost text: ' + it.cost.text + ' (' + it.cost.basis + ').' : 'No cost text.' ),
         h( 'div', { class: 'row' }, h( 'button', { onclick: () => openIdea( key ) }, 'Open detail' ), h( 'button', { onclick: () => Compare.add( key, true ) }, 'Add to compare' ) ) );
-      if( it.hq ) info.append( h( 'div', { class: 'stack', style: 'gap:6px' }, h( 'h4', null, 'High resolution stills, judged parameters' ), stillsGrid( ideaStills( it, it.hq ) ) ) );
+      if( it.hq ) info.append( h( 'div', { class: 'stack', style: 'gap:6px' }, h( 'h4', null, isJudged( it ) ? 'High resolution stills, judged parameters' : 'Stills of the prototype, not judged' ), stillsGrid( ideaStills( it, it.hq ) ) ) );
     }
     else
     {
@@ -1708,18 +1722,18 @@ RENDER.live = async root =>
   for( const r of real ) chips.append( h( 'button', { class: 'chip', data: { key: 'real:' + r.stem }, onclick: () => show( 'real', r.stem ) }, r.class, ' ', h( 'span', { class: 'pill kind real' }, 'real' ) ) );
   for( const it of top ) chips.append( h( 'button', { class: 'chip', data: { key: 'proto:' + it.id }, onclick: () => show( 'proto', it.id ) }, '#' + it.rank + ' ' + it.name ) );
   const more = h( 'select', { class: 'small', onchange: () => { if( more.value ) show( 'proto', more.value ); } }, h( 'option', { value: '' }, 'any other prototype…' ),
-    D.ideas.filter( i => i.proto_ok ).map( i => h( 'option', { value: i.id }, '#' + i.rank + ' ' + i.name + ' (' + i.family + ')' ) ) );
+    D.ideas.filter( i => i.proto_ok ).map( i => h( 'option', { value: i.id }, ideaLabel( i ) ) ) );
   const eng = D.engines;
   put( root, 
     h( 'div', { class: 'stack' },
       h( 'h2', null, 'Live previews' ),
-      h( 'p', { class: 'lead' }, real.length ? `${ real.length } real node${ real.length > 1 ? 's' : '' } can run here; the rest are scalar prototypes from the tournament. ` : 'Every preview here is a scalar prototype compiled to WASM. ',
+      h( 'p', { class: 'lead' }, real.length ? `${ real.length } real node${ real.length > 1 ? 's' : '' } can run here; the rest are scalar prototypes, ${ D.counts.judged } judged in the tournament and ${ D.counts.second_pass } made afterwards and not judged. ` : 'Every preview here is a scalar prototype compiled to WASM. ',
         notRunnable.length ? `${ notRunnable.map( r => r.class ).join( ', ' ) } ${ notRunnable.length > 1 ? 'have' : 'has' } landed with a native port and report, but the page’s real-node WASM build does not contain ${ notRunnable.length > 1 ? 'them' : 'it' } yet: see the Plan tab for images, gates and bench. ` : '',
         `Top of the ranking first. A real node is edited on its FastNoise node graph, which drives the preview beside it; prototypes are not FastNoise nodes, so they have sliders. Drag the preview to pan, or use two fingers on a touch screen; + and − zoom. Output and display under each preview set the render size and how large it shows; your choices stay in this browser. Renders run in web workers and refine in passes, and a long one shows its progress and can be cancelled.` ) ),
     h( 'div', { class: 'row' }, chips, more ),
     host, info,
     h( 'div', { class: 'tiles' },
-      tile( D.ideas.length, 'ideas judged' ), tile( D.families.length, 'families' ), tile( D.plan.counts ? D.plan.counts.planned_nodes : '–', 'nodes planned' ),
+      tile( D.counts.judged, 'ideas judged' ), tile( D.counts.second_pass, 'prototyped, not judged' ), tile( D.counts.covered, 'covered by real nodes' ), tile( D.families.length, 'families' ), tile( D.plan.counts ? D.plan.counts.planned_nodes : '–', 'nodes planned' ),
       tile( landed.length, 'real nodes landed' ), tile( D.plan.kernels_merged.length, 'kernels merged' ), tile( D.counts.discoveries, 'discoveries' ), tile( D.process.merged_ideas, 'ideas in the trail' ) ),
     h( 'p', { class: 'small mut' }, 'Engines: prototypes ', eng.proto ? `protos.wasm ${ ( eng.proto.bytes / 1e6 ).toFixed( 2 ) } MB, built ${ eng.proto.built || '' }` : 'missing', '; real nodes ', eng.real ? `${ eng.real.source } (${ eng.real.label }), ${ ( eng.real.bytes / 1e6 ).toFixed( 2 ) } MB, built ${ eng.real.built }` : 'missing', '; node editor ', eng.editor ? `${ ( eng.editor.first_load_bytes / 1e6 ).toFixed( 2 ) } MB, built ${ eng.editor.built }, loaded the first time a graph is needed` : 'missing', '. Data generated ', D.generated, '.' ) );
   if( real.length ) show( 'real', real[0].stem ); else if( top.length ) show( 'proto', top[0].id );
@@ -1987,17 +2001,20 @@ RENDER.editor = async root =>
 // =================================================================== CATALOG
 RENDER.catalog = root =>
 {
-  const st = { family: '', call: new Set(), status: new Set(), cost: '', sort: 'combined', q: '' };
+  const st = { family: '', call: new Set(), status: new Set(), cost: '', sort: 'combined', q: '', pcall: '' };
+  const judged = D.ideas.filter( isJudged );
   const grid = h( 'div', { class: 'grid' } );
   const count = h( 'span', { class: 'small mut' } );
   const bucket = ns => ns === null || ns === undefined ? 'none' : ns <= 5 ? 'a' : ns <= 20 ? 'b' : ns <= 100 ? 'c' : 'd';
   function apply()
   {
     const q = st.q.toLowerCase();
-    let list = D.ideas.filter( i => ( !st.family || i.family === st.family ) && ( !st.call.size || st.call.has( i.call ) ) && ( !st.status.size || st.status.has( i.status ) )
-      && ( !st.cost || bucket( i.cost.ns ) === st.cost ) && ( !q || ( i.name + ' ' + i.id + ' ' + i.one_liner + ' ' + i.family + ' ' + ( i.disp.target || '' ) ).toLowerCase().includes( q ) ) );
-    const key = { combined: i => -i.combined, panel: i => -i.panel_mean, critic: i => -i.critic_mean, cost: i => i.cost.ns ?? 1e9, name: i => i.name.toLowerCase(), rank: i => i.rank, wasm: i => i.cost.wasm_ns2 ?? 1e9 }[st.sort];
-    list.sort( ( a, b ) => key( a ) < key( b ) ? -1 : key( a ) > key( b ) ? 1 : 0 );
+    let list = D.ideas.filter( i => ( !st.family || i.family === st.family ) && ( !st.call.size || st.call.has( i.call ) ) && ( !st.status.size || st.status.has( i.status ) ) && ( !st.pcall || i.prototyper_call === st.pcall )
+      && ( !st.cost || bucket( i.cost.ns ) === st.cost ) && ( !q || ( i.name + ' ' + i.id + ' ' + i.one_liner + ' ' + ( i.family || i.category || '' ) + ' ' + ( i.disp.target || '' ) ).toLowerCase().includes( q ) ) );
+    // Ideas without a score go after the judged ones when the sort is by score; among themselves, by name.
+    const score = f => i => isJudged( i ) ? f( i ) : Infinity;
+    const key = { combined: score( i => -i.combined ), panel: score( i => -i.panel_mean ), critic: score( i => -i.critic_mean ), cost: i => i.cost.ns ?? 1e9, name: i => i.name.toLowerCase(), rank: score( i => i.rank ), wasm: i => i.cost.wasm_ns2 ?? 1e9 }[st.sort];
+    list.sort( ( a, b ) => key( a ) < key( b ) ? -1 : key( a ) > key( b ) ? 1 : a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1 );
     grid.textContent = '';
     list.forEach( i => grid.append( ideaCard( i ) ) );
     count.textContent = `${ list.length } of ${ D.ideas.length }`;
@@ -2008,15 +2025,17 @@ RENDER.catalog = root =>
   const famSel = h( 'select', { onchange: () => { st.family = famSel.value; apply(); } }, h( 'option', { value: '' }, 'all families' ), D.family_list.map( f => h( 'option', { value: f }, f ) ) );
   const costSel = h( 'select', { onchange: () => { st.cost = costSel.value; apply(); } }, [ [ '', 'any cost' ], [ 'a', '≤ 5 ns' ], [ 'b', '5–20 ns' ], [ 'c', '20–100 ns' ], [ 'd', '> 100 ns' ], [ 'none', 'no figure' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
   const sortSel = h( 'select', { onchange: () => { st.sort = sortSel.value; apply(); } }, [ [ 'combined', 'sort: combined score' ], [ 'panel', 'sort: panel mean' ], [ 'critic', 'sort: critic mean' ], [ 'cost', 'sort: AVX2 ns figure' ], [ 'wasm', 'sort: WASM scalar ns (2D)' ], [ 'name', 'sort: name' ], [ 'rank', 'sort: rank' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
+  const pcallSel = h( 'select', { id: 'cat-pcall', onchange: () => { st.pcall = pcallSel.value; apply(); } }, [ [ '', 'any prototyper’s call' ], [ 'keeper', 'prototyper’s call: keeper' ], [ 'promising', 'prototyper’s call: promising' ], [ 'merged', 'prototyper’s call: merged' ], [ 'weak', 'prototyper’s call: weak' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
   const search = h( 'input', { type: 'search', id: 'cat-search', placeholder: 'search name, id, one-liner, planned node', oninput: () => { st.q = search.value; apply(); } } );
   const proc = D.process;
   put( root, 
-    h( 'h2', null, 'Catalog of judged ideas' ),
-    h( 'p', { class: 'lead' }, `${ D.ideas.length } ideas from ${ D.families.length } families run on ${ proc.proto_count } scalar C++ prototypes and were judged by a critic (5 scores) and ${ D.lenses.length } panel lenses. Combined score = (critic mean + panel mean) / 2. Calls: `,
+    h( 'h2', null, 'Catalog of ideas' ),
+    h( 'p', { class: 'lead' }, `All ${ D.ideas.length } merged ideas. ${ D.counts.second_pass } were prototyped later and were not judged, so they show no scores and only their prototyper’s own opinion. ${ D.counts.covered } are covered by a real node and show that node.` ),
+    h( 'p', { class: 'lead' }, `${ judged.length } ideas from ${ D.families.length } families were judged by a critic (5 scores) and ${ D.lenses.length } panel lenses. Combined score = (critic mean + panel mean) / 2. Calls: `,
       Object.entries( proc.calls || {} ).map( ( [ k, v ], i ) => [ i ? ', ' : '', `${ v } ${ k }` ] ), '. Costs keep their basis: most are estimates. The ns figure on a card is the first AVX2 number in the cost text, the low end of a range, and it can be per octave or exclude the source, so open the card for the whole text.' ),
-    h( 'div', { class: 'box' }, h( 'h4', null, 'Combined score by critic call' ), scoreStrip( D.ideas, openIdea ),
+    h( 'div', { class: 'box' }, h( 'h4', null, 'Combined score by critic call' ), scoreStrip( judged, openIdea ),
       h( 'div', { class: 'row small' }, Object.keys( CALL_LABEL ).map( c => callPill( c ) ), h( 'span', { class: 'mut' }, 'rows top to bottom; click a dot to open') ) ),
-    h( 'div', { class: 'filters' }, search, famSel, costSel, sortSel, h( 'span', { class: 'chips' }, callBtns ), h( 'span', { class: 'chips' }, statusBtns ), count ),
+    h( 'div', { class: 'filters' }, search, famSel, costSel, sortSel, pcallSel, h( 'span', { class: 'chips' }, callBtns ), h( 'span', { class: 'chips' }, statusBtns ), count ),
     grid );
   apply();
 };
@@ -2040,19 +2059,19 @@ async function openIdea( id )
   const panel = h( 'div', { class: 'panel', role: 'dialog', 'aria-label': it.name }, h( 'p', { class: 'mut' }, 'loading detail…' ) );
   m.append( panel );
   let det;
-  try { det = ( await detail( it.family ) )[id]; } catch( e ) { panel.textContent = 'Detail failed to load: ' + e.message; return; }
+  try { det = ( await detail( it.detail_file || it.family ) )[id]; } catch( e ) { panel.textContent = 'Detail failed to load: ' + e.message; return; }
   if( m.hidden ) return;
   panel.textContent = '';
   const pvHost = h( 'div' );
   const head = h( 'div', { class: 'mhead' },
-    h( 'div', { class: 'stack', style: 'gap:4px' }, h( 'div', { class: 'row' }, h( 'h2', null, it.name ), h( 'code', null, it.id ), famChip( it.family ), callPill( it.call ), statusPill( it ), it.mode_of ? h( 'span', { class: 'small mut' }, 'mode of ' + it.mode_of ) : null ),
+    h( 'div', { class: 'stack', style: 'gap:4px' }, h( 'div', { class: 'row' }, h( 'h2', null, it.name ), h( 'code', null, it.id ), famChip( it.family || it.category ), callPill( it.call ), statusPill( it ), protoCallPill( it ), it.mode_of ? h( 'span', { class: 'small mut' }, 'mode of ' + it.mode_of ) : null ),
       h( 'p', null, it.one_liner ) ),
     h( 'button', { class: 'x', onclick: closeModal, 'aria-label': 'close' }, '×' ) );
   const tabs = h( 'div', { class: 'tabbar' } ), body = h( 'div', { class: 'stack' } );
-  const sections = {
-    overview: () => overviewTab( it, det ), images: () => imagesTab( det ), critic: () => criticTab( it, det ), panel: () => panelTab( it, det ), plan: () => planTab( it, det ), research: () => researchTab( it, det )
-  };
-  const labels = { overview: 'Overview', images: `Images (${ det.images.length })`, critic: 'Critic', panel: 'Panel', plan: 'Plan', research: 'Research' };
+  const sections = it.kind === 'second-pass' ? { overview: () => secondPassTab( it, det ), research: () => researchTab( it, det ) }
+    : it.kind === 'covered' ? { overview: () => coveredTab( it, det ), plan: () => planTab( it, det ), research: () => researchTab( it, det ) }
+    : { overview: () => overviewTab( it, det ), images: () => imagesTab( det ), critic: () => criticTab( it, det ), panel: () => panelTab( it, det ), plan: () => planTab( it, det ), research: () => researchTab( it, det ) };
+  const labels = { overview: 'Overview', images: `Images (${ det.images.length })`, critic: 'Critic', panel: 'Panel', plan: it.kind === 'covered' ? 'The node' : 'Plan', research: isJudged( it ) ? 'Research' : 'Catalogue text' };
   for( const k of Object.keys( sections ) ) tabs.append( h( 'button', { data: { k }, onclick: () => pick( k ) }, labels[k] ) );
   function pick( k ) { for( const b of tabs.children ) b.classList.toggle( 'on', b.dataset.k === k ); body.textContent = ''; body.append( sections[k]() ); }
   // live preview: real node if landed, else the prototype
@@ -2071,16 +2090,16 @@ async function openIdea( id )
     else previews.modal = new Preview( pvHost, { kind: 'proto', idea: key } );
   }
   for( const [ k, key ] of kinds ) pvBar.append( h( 'button', { class: 'small', data: { k }, onclick: () => showPv( k, key ) }, k === 'real' ? 'real node' : 'scalar prototype' ) );
-  pvBar.append( h( 'button', { class: 'small', onclick: () => { Compare.add( id, true ); closeModal(); } }, 'Add to compare' ) );
+  if( it.proto_ok ) pvBar.append( h( 'button', { class: 'small', onclick: () => { Compare.add( id, true ); closeModal(); } }, 'Add to compare' ) );
   const realNode = det.real ? D.plan.real.find( r => r.stem === det.real ) : null;
   const stillList = ideaStills( it, it.hq ), realList = realNode ? realStills( realNode ) : [];
   const capNote = it.hq && it.hq.capped ? h( 'p', { class: 'small mut' }, it.hq.capped ) : null;
   const stills = stillList.length || realList.length ? h( 'div', { class: 'stack', style: 'gap:6px' },
-    realList.length ? [ h( 'h4', null, 'Real node presets, high resolution' ), stillsGrid( realList ) ] : null,
-    stillList.length ? [ h( 'h4', null, 'Prototype at its judged parameters, high resolution' ), stillsGrid( stillList ) ] : null, capNote,
+    realList.length ? [ h( 'h4', null, it.kind === 'covered' ? 'Covered by ' + it.covered_by + ': the node’s presets, high resolution' : 'Real node presets, high resolution' ), stillsGrid( realList ) ] : null,
+    stillList.length ? [ h( 'h4', null, isJudged( it ) ? 'Prototype at its judged parameters, high resolution' : it.hq.relief ? 'Prototype, not judged, high resolution' : 'Prototype, not judged' ), stillsGrid( stillList ) ] : null, capNote,
     h( 'p', { class: 'small mut' }, 'Open one for 100% with zoom and pan.' ) ) : null;
-  put( panel, head, stills, scoreTiles( it ), kinds.length > 1 ? pvBar : h( 'div', { class: 'row' }, pvBar.lastChild ), pvHost, tabs, body );
-  if( kinds.length ) showPv( kinds[0][0], kinds[0][1] ); else pvHost.append( h( 'p', { class: 'small mut' }, 'No runnable prototype for this idea in the WASM build.' ) );
+  put( panel, head, stills, scoreTiles( it ), kinds.length > 1 ? pvBar : pvBar.lastChild && pvBar.lastChild.dataset.k === undefined ? h( 'div', { class: 'row' }, pvBar.lastChild ) : null, pvHost, tabs, body );
+  if( kinds.length ) showPv( kinds[0][0], kinds[0][1] ); else pvHost.append( h( 'p', { class: 'small mut' }, it.kind === 'covered' ? it.covered_by + ' has no live preview in this WASM build.' : 'No runnable prototype for this idea in the WASM build.' ) );
   pick( 'overview' );
   panel.scrollTop = 0;
 }
@@ -2105,6 +2124,42 @@ function overviewTab( it, det )
       textBlock( 'Proposed node shape', det.node_shape ), textBlock( 'Port notes', det.port_notes ), textBlock( 'Judged parameters', det.params_text ) ),
     det.plan_node && det.plan_node.members ? h( 'div', { class: 'box' }, h( 'h4', null, `Proposed members of ${ det.plan_node.class }${ det.plan_node.primary ? '' : ' (this idea is absorbed into it)' }` ), membersTable( det.plan_node.members ) ) : null,
     h( 'div', { class: 'box' }, h( 'h4', null, 'Disposition' ), kv( [ [ 'where', it.disp.where ], [ 'target', it.disp.target ], [ 'how', it.disp.how ], [ 'judged', it.judged ], [ 'proto', ( pi.proto || '' ) + ( pi.proto_note ? ' (' + pi.proto_note + ')' : '' ) ], [ 'source', det.proto_source ] ] ) ) );
+}
+// Prototypers wrote some of these as a table by mode or dimension.
+const asText = v => v === null || v === undefined || v === '' ? null : typeof v === 'string' ? v : typeof v !== 'object' ? String( v ) : Object.entries( v ).map( ( [ k, x ] ) => k + ': ' + ( x && typeof x === 'object' ? asText( x ).replace( /\n/g, ', ' ) : x ) ).join( '\n' );
+const asBlock = ( title, v ) => textBlock( title, typeof v === 'string' || !v ? v : asText( v ).split( '\n' ).map( l => '- ' + l ).join( '\n' ) );
+function secondPassTab( it, det )
+{
+  const me = det.measured || {}, pi = det.proto_index || {}, st = me.c0_step_h || {};
+  const steps = Object.entries( st ).map( ( [ h, v ] ) => 'h ' + h + ': ' + v ).join( ', ' );
+  const target = det.merged_into && it.merged_into && ideaById.has( it.merged_into ) ? h( 'a', { href: '#', onclick: e => { e.preventDefault(); openIdea( it.merged_into ); } }, it.merged_into ) : null;
+  return h( 'div', { class: 'stack' },
+    h( 'div', { class: 'box warn' }, h( 'h4', null, 'Prototype only, not judged' ),
+      h( 'p', { class: 'small' }, 'This idea got a prototype after the tournament, so that it would have images and a live preview. No critic or panel has seen it. What follows is the prototyper’s own report and what the harness measured.' ),
+      kv( [ [ 'prototyper’s call', det.prototyper_call + ' (the prototyper on their own work, not a judge’s verdict)' ], [ 'merged into', det.merged_into ? h( 'span', null, target, target && det.merged_into !== it.merged_into ? ' ' : '', det.merged_into === it.merged_into && target ? '' : det.merged_into ) : null ] ] ) ),
+    h( 'div', { class: 'box' }, h( 'h4', null, 'Measured' ),
+      kv( [
+        [ 'scalar vs perlin2', me.scalar_vs_perlin ? ( /^[\d.]+$/.test( me.scalar_vs_perlin ) ? me.scalar_vs_perlin + 'x perlin2' : me.scalar_vs_perlin ) : null ],
+        [ 'how to read it', 'Many of these prototypes do per-sample param lookups, so the ratios only compare roughly.' + ( me.scalar_note ? ' ' + me.scalar_note : '' ) ],
+        [ 'WASM scalar', pi.ns2 ? `${ pi.ns2 } ns 2D, ${ pi.ns3 || '–' } ns 3D per sample (prototype in WASM, one thread in Node; not a controlled benchmark)` : null ],
+        [ 'AVX2 cost', me.est_avx2_ns ? me.est_avx2_ns + ( /estimate/i.test( me.est_avx2_ns ) ? '' : ' (estimate)' ) : null ],
+        [ 'c0 ratio', me.c0_plain != null ? fmt( me.c0_plain, 2 ) + ' (about 8 = continuous, about 1 = jumps or very steep; this probe never crosses lattice lines at integers, halves and quarters)' : null ],
+        [ 'c0 ratio, straddling those lines', me.c0_straddle != null ? fmt( me.c0_straddle, 2 ) + ' (same probe with the samples shifted by -0.0005)' : null ],
+        [ 'largest step', steps ? steps + ' (a slope shrinks with the probe step h, a jump keeps its size)' : null ],
+      ] ),
+      me.c0_note ? h( 'p', { class: 'small mut', style: 'margin-top:6px' }, 'The prototyper on c0: ', asText( me.c0_note ) ) : null,
+      me.c0ratio && typeof me.c0ratio === 'object' ? asBlock( 'c0 ratio by mode, as the prototyper measured it', me.c0ratio ) : null ),
+    h( 'div', { class: 'cols' },
+      textBlock( 'Look (the prototyper’s words)', det.look ), textBlock( 'Known artifacts', asText( det.artifacts ) ), asBlock( 'Dimensions', det.dims ), asBlock( 'Range', det.range ),
+      textBlock( 'Proposed node shape', asText( det.node_shape ) ), textBlock( 'Port notes', asText( det.port_notes ) ), textBlock( 'Parameters and other settings', asText( det.params_text ) ) ) );
+}
+function coveredTab( it, det )
+{
+  const r = det.real ? D.plan.real.find( r => r.stem === det.real ) : null;
+  return h( 'div', { class: 'stack' },
+    h( 'div', { class: 'box' }, h( 'h4', null, 'Covered by ' + it.covered_by ),
+      h( 'p', { class: 'small' }, 'This idea has no prototype of its own, because the real node ', h( 'b', null, it.covered_by ), ' already does what it asks for. The stills and the live preview here are that node’s. The idea itself was not judged.' ),
+      h( 'div', { class: 'row', style: 'margin-top:6px' }, h( 'button', { class: 'small', onclick: () => { closeModal(); location.hash = '#plan'; } }, 'Open the plan' ) ) ) );
 }
 function membersTable( members )
 {
@@ -2315,7 +2370,7 @@ function planTab( it, det )
       n.notes && n.notes.length ? h( 'ul', { class: 'small' }, n.notes.map( x => h( 'li', null, x ) ) ) : null,
       n.absorbs ? h( 'div', { class: 'small' }, h( 'b', null, 'Absorbs: ' ), n.absorbs.map( ( a, i ) => [ i ? ', ' : '', h( 'a', { href: '#', onclick: e => { e.preventDefault(); openIdea( a.id ); } }, a.id ), ' (' + a.how + ')' ] ) ) : null,
       n.protos ? h( 'div', { class: 'small' }, h( 'b', null, 'Prototype params: ' ), n.protos.map( p => h( 'div', null, h( 'code', null, p.params ), ' ', h( 'span', { class: 'mut' }, p.label ) ) ) ) : null,
-      n.members ? membersTable( n.members ) : null ) : h( 'p', { class: 'small mut' }, 'Not a planned node.' ),
+      n.members ? membersTable( n.members ) : null ) : it.kind === 'covered' ? null : h( 'p', { class: 'small mut' }, 'Not a planned node.' ),
     det.queue ? h( 'div', { class: 'box' }, h( 'h4', null, 'Queue (round 1 judges)' ), kv( [ [ 'tier', det.queue.tier ], [ 'reason', det.queue.reason ] ] ) ) : null );
 }
 function researchTab( it, det )
@@ -2345,7 +2400,7 @@ const Compare = {
     for( const id of this.sel )
     {
       const it = ideaById.get( id );
-      const cell = h( 'div', { class: 'box', style: 'padding:8px' }, h( 'div', { class: 'row', style: 'margin-bottom:6px' }, h( 'b', null, it.name ), callPill( it.call ), h( 'span', { class: 'num mut' }, fmt( it.combined ) ), h( 'button', { class: 'small', style: 'margin-left:auto', onclick: () => openIdea( id ) }, 'detail' ) ) );
+      const cell = h( 'div', { class: 'box', style: 'padding:8px' }, h( 'div', { class: 'row', style: 'margin-bottom:6px' }, h( 'b', null, it.name ), callPill( it.call ), isJudged( it ) ? h( 'span', { class: 'num mut' }, fmt( it.combined ) ) : protoCallPill( it ), h( 'button', { class: 'small', style: 'margin-left:auto', onclick: () => openIdea( id ) }, 'detail' ) ) );
       this.host.append( cell );
       if( it.proto_ok ) previews.compare.push( new Preview( cell, { kind: 'proto', idea: id, compact: true, seed: this.seed, window: this.window, mode: this.mode, shade: this.shade, res: Prefs.get( 'cmpRes' ), aspect: Prefs.get( 'cmpAspect' ) } ) );
       else cell.append( h( 'p', { class: 'small mut' }, 'no runnable prototype' ) );
@@ -2371,7 +2426,7 @@ RENDER.compare = root =>
   Compare.host = h( 'div', { class: 'grid' } );
   const qSel = h( 'select', { onchange: () => pickQuestion( qSel.value ) }, h( 'option', { value: '' }, 'pre-built comparison…' ),
     D.families.map( f => h( 'option', { value: f.family }, ( f.question ? f.question + ' ' : '' ) + '[' + f.family + ', ' + f.ideas.length + ' ideas]' ) ) );
-  const addSel = h( 'select', { onchange: () => { if( addSel.value ) { Compare.add( addSel.value ); addSel.value = ''; } } }, h( 'option', { value: '' }, 'add an idea…' ), D.ideas.filter( i => i.proto_ok ).map( i => h( 'option', { value: i.id }, '#' + i.rank + ' ' + i.name + ' (' + i.family + ')' ) ) );
+  const addSel = h( 'select', { onchange: () => { if( addSel.value ) { Compare.add( addSel.value ); addSel.value = ''; } } }, h( 'option', { value: '' }, 'add an idea…' ), D.ideas.filter( i => i.proto_ok ).map( i => h( 'option', { value: i.id }, ideaLabel( i ) ) ) );
   const seedIn = h( 'input', { type: 'number', value: Compare.seed, style: 'width:88px', id: 'cmp-seed', oninput: () => Compare.shared( { seed: +seedIn.value | 0 } ) } );
   const winIn = h( 'input', { type: 'number', value: Compare.window, step: 1, min: 1, style: 'width:70px', id: 'cmp-window', oninput: () => Compare.shared( { window: +winIn.value || 8 } ) } );
   const modeSel = h( 'select', { onchange: () => Compare.shared( { mode: modeSel.value } ) }, MODES.proto.map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
@@ -2406,7 +2461,7 @@ RENDER.compare = root =>
   }
   put( root, 
     h( 'h2', null, 'Compare' ),
-    h( 'p', { class: 'lead' }, 'Up to four prototypes side by side with one seed, window and output size. The pre-built comparisons are the family questions from queue.md with the critic’s answer; families without a queue question are listed by name.' ),
+    h( 'p', { class: 'lead' }, 'Up to four prototypes side by side with one seed, window and output size. The pre-built comparisons are the family questions from queue.md with the critic’s answer; families without a queue question are listed by name. Prototypes that were not judged can be added too; they have no family.' ),
     h( 'div', { class: 'filters' }, qSel, addSel, h( 'label', null, 'seed ', seedIn ), h( 'label', null, 'window ', winIn ), modeSel, shadeSel, h( 'label', null, 'output ', resSel ), h( 'label', null, 'shape ', aspectSel ), h( 'label', null, 'cells ', cellSel ), h( 'label', null, 'workers ', workerSel ), h( 'button', { class: 'small', onclick: () => previews.compare.forEach( p => { if( p.busy ) p.cancelRender(); } ) }, 'cancel all' ) ),
     Compare.selBox, Compare.host, answer );
   if( !Compare.sel.length ) { qSel.value = D.families.find( f => f.question ) ? D.families.find( f => f.question ).family : D.families[0].family; pickQuestion( qSel.value ); }
@@ -2437,9 +2492,9 @@ function renderDiscoveries( root, M )
       act: treeInText( d ) || d.sheet ? () => h( 'div', { class: 'row' },
         treeInText( d ) ? h( 'button', { type: 'button', class: 'toed', onclick: () => openDsl( d.name, treeInText( d ) ) }, 'Open in node editor' ) : null,
         d.sheet ? h( 'button', { type: 'button', onclick: () => lightbox( [ { ref: d.sheet, label: d.name + ': the analysis sheet the lab kept', file: d.file } ], 0 ) }, 'Analysis sheet' ) : null ) : null,
-      text: [ d.how ? 'How: ' + d.how : '', d.why ? 'Why it matters: ' + d.why : '', d.proto ? 'Prototype: ' + d.proto : '', 'Source: ' + d.source, d.render ? `Rendered again from ${ d.render.by }${ d.render.set ? ' with ' + d.render.set : '' }; shrunk to the size of the image the lab kept it correlates ${ d.render.r.map( x => x.toFixed( 2 ) ).join( ' and ' ) } with it${ d.render.r.length > 1 ? ' (gray, hillshade)' : '' }.` : '' ].filter( Boolean ).join( '\n' ), file: d.file } ) );
+      text: [ d.how ? 'How: ' + d.how : '', d.why ? 'Why it matters: ' + d.why : '', d.idea ? 'From the idea: ' + d.idea : '', d.proto ? 'Prototype: ' + d.proto : '', 'Source: ' + d.source, d.render ? `Rendered again from ${ d.render.by }${ d.render.set ? ' with ' + d.render.set : '' }; shrunk to the size of the image the lab kept it correlates ${ d.render.r.map( x => x.toFixed( 2 ) ).join( ' and ' ) } with it${ d.render.r.length > 1 ? ' (gray, hillshade)' : '' }.` : '' ].filter( Boolean ).join( '\n' ), file: d.file } ) );
     l.forEach( ( d, i ) => grid.append( h( 'div', { class: 'card', role: 'button', tabindex: 0, 'aria-label': d.name, onclick: () => lightbox( lb, i ), onkeydown: e => { if( e.key === 'Enter' && e.target === e.currentTarget ) lightbox( lb, i ); } }, img( d.thumb, { class: 'th', alt: d.name } ),
-      h( 'div', { class: 'body' }, h( 'div', { class: 'name' }, h( 'span', null, d.name ) ), h( 'div', { class: 'one' }, d.how || ( d.missing ? 'image file not on disk' : 'no text recorded' ) ), h( 'div', { class: 'meta' }, famChip( d.family ), d.source !== 'tournament.json' ? h( 'span', { class: 'small mut' }, 'file only' ) : null ), treeInText( d ) ? h( 'div', null, h( 'button', { type: 'button', class: 'toed', onclick: e => { e.stopPropagation(); openDsl( d.name, treeInText( d ) ); } }, 'Open in node editor' ) ) : null ) ) ) );
+      h( 'div', { class: 'body' }, h( 'div', { class: 'name' }, h( 'span', null, d.name ) ), h( 'div', { class: 'one' }, d.how || ( d.missing ? 'image file not on disk' : 'no text recorded' ) ), h( 'div', { class: 'meta' }, famChip( d.family ), d.family === 'second pass' ? ( d.idea && ideaById.has( d.idea ) ? h( 'button', { type: 'button', class: 'chip', onclick: e => { e.stopPropagation(); openIdea( d.idea ); } }, d.idea ) : null ) : d.source !== 'tournament.json' ? h( 'span', { class: 'small mut' }, 'file only' ) : null ), treeInText( d ) ? h( 'div', null, h( 'button', { type: 'button', class: 'toed', onclick: e => { e.stopPropagation(); openDsl( d.name, treeInText( d ) ); } }, 'Open in node editor' ) ) : null ) ) ) );
   }
   const famSel = h( 'select', { onchange: () => { fam = famSel.value; apply(); } }, h( 'option', { value: '' }, 'all families' ), fams.map( f => h( 'option', { value: f }, f ) ) );
   const search = h( 'input', { type: 'search', id: 'disc-search', placeholder: 'search discoveries', oninput: () => { q = search.value.toLowerCase(); apply(); } } );
@@ -2458,7 +2513,7 @@ function renderDiscoveries( root, M )
     openRow( linked ) ); };
   put( root, 
     h( 'h2', null, 'Discoveries and round 2 seeds' ),
-    h( 'p', { class: 'lead' }, `${ M.discoveries.filter( d => d.source === 'tournament.json' ).length } accidents and mutations were written up by the prototypers and critics, and ${ M.discoveries.filter( d => d.source !== 'tournament.json' ).length } more image files sit beside them without an entry. Each card says how it arose where that was recorded.${ M.disc_stats ? ` ${ M.disc_stats.rerendered } images were rendered again at high resolution, each checked by correlation against the image the lab kept; the other ${ M.disc_stats.kept } are comparisons, or could not be reproduced exactly, and stay at their source size.` : '' }` ),
+    h( 'p', { class: 'lead' }, `${ M.discoveries.filter( d => d.source === 'tournament.json' ).length } accidents and mutations were written up by the prototypers and critics in the tournament, ${ M.discoveries.filter( d => d.family === 'second pass' ).length } more came from the later prototypes that were not judged, and ${ M.discoveries.filter( d => d.source !== 'tournament.json' && d.family !== 'second pass' ).length } more image files sit beside them without an entry. Each card says how it arose where that was recorded.${ M.disc_stats ? ` ${ M.disc_stats.rerendered } images were rendered again at high resolution, each checked by correlation against the image the lab kept; the other ${ M.disc_stats.kept } are comparisons, or could not be reproduced exactly, and stay at their source size.` : '' }` ),
     h( 'div', { class: 'filters' }, search, famSel, count ),
     grid,
     h( 'h2', null, 'Round 2 crossbreeds' ), md( r2.intro.replace( /^# Round 2 seeds\s*/, '' ) ), crossTable,
@@ -2587,7 +2642,7 @@ function benchChart( real )
 RENDER.trail = root =>
 {
   const host = h( 'div' ), count = h( 'span', { class: 'small mut' } );
-  put( root,  h( 'h2', null, 'Research trail' ), h( 'p', { class: 'lead' }, 'Every merged idea from the research round, with its sources, lenses and what happened to it, including the ones never queued. Links open in a new tab.' ), host );
+  put( root,  h( 'h2', null, 'Research trail' ), h( 'p', { class: 'lead' }, 'Every merged idea from the research round, with its sources, lenses and what happened to it, including the ones never queued. A thumbnail or a status button opens the idea. Source links open in a new tab.' ), host );
   host.append( h( 'p', { class: 'mut' }, 'loading trail…' ) );
   fetch( 'data/trail.json' ).then( r => r.json() ).then( t =>
   {
@@ -2600,21 +2655,25 @@ RENDER.trail = root =>
       const q = st.q.toLowerCase();
       const l = t.ideas.filter( i => ( !st.cat || i.category === st.cat ) && ( !st.origin || i.origin === st.origin )
         && ( st.only !== 'queued' || i.queue ) && ( st.only !== 'judged' || i.judged ) && ( st.only !== 'unqueued' || !i.queue ) && ( st.only !== 'sources' || ( i.sources && i.sources.length ) )
+        && ( st.only !== 'second-pass' && st.only !== 'covered' || ( ideaById.get( i.id ) || {} ).kind === st.only )
         && ( !q || JSON.stringify( i ).toLowerCase().includes( q ) ) );
       count.textContent = `${ l.length } of ${ t.ideas.length }`;
       list.textContent = '';
       for( const i of l.slice( 0, 400 ) )
       {
         const det = h( 'div', { class: 'stack', hidden: true } );
-        const row = h( 'div', { class: 'trow' },
+        const it = ideaById.get( i.id );
+        const row = h( 'div', { class: 'trow' + ( it && it.thumb ? ' withth' : '' ) },
+          it && it.thumb ? h( 'button', { type: 'button', class: 'tth', 'aria-label': 'open ' + i.name, onclick: () => openIdea( i.id ) }, img( it.thumb, { alt: '' } ) ) : null,
+          h( 'div', { class: 'tbody' },
           h( 'div', { class: 't' }, h( 'b', null, i.name ), h( 'code', null, i.id ), famChip( i.category ), h( 'span', { class: 'small mut' }, i.origin ),
             i.queue ? h( 'span', { class: 'pill kind' }, 'queued tier ' + i.queue.tier ) : h( 'span', { class: 'small mut' }, 'not queued' ),
-            i.judged ? h( 'button', { class: 'chip', onclick: () => openIdea( i.id ) }, `judged #${ i.judged.rank } · ${ fmt( i.judged.combined ) } · ${ i.judged.call }` ) : null ),
+            i.judged ? h( 'button', { class: 'chip', onclick: () => openIdea( i.id ) }, `judged #${ i.judged.rank } · ${ fmt( i.judged.combined ) } · ${ i.judged.call }` ) : it && it.kind === 'covered' ? h( 'button', { class: 'chip', onclick: () => openIdea( i.id ) }, 'covered by ' + it.covered_by ) : it ? h( 'button', { class: 'chip', onclick: () => openIdea( i.id ) }, 'prototype only, not judged · prototyper’s call: ' + it.prototyper_call + ( it.merged_into ? ' into ' + it.merged_into : '' ) ) : null ),
           h( 'p', { class: 'small' }, i.one_liner ),
           i.sources && i.sources.length ? h( 'div', { class: 'srcs row' }, i.sources.map( s => /^https?:/.test( s ) ? h( 'a', { href: s, target: '_blank', rel: 'noopener' }, s.replace( /^https?:\/\//, '' ).slice( 0, 60 ) ) : h( 'span', { class: 'small mut' }, s ) ) ) : null,
           h( 'button', { class: 'small', style: 'justify-self:start', onclick: () => { det.hidden = !det.hidden; if( !det.childElementCount ) det.append( kv( [ [ 'lenses', ( i.lenses || [] ).join( ', ' ) ], [ 'models', ( i.models || [] ).join( ', ' ) ], [ 'merged from', ( i.merged_from || [] ).join( ', ' ) ], [ 'related', ( i.related || [] ).join( ', ' ) ], [ 'queue reason', i.queue && i.queue.reason ], [ 'disposition', i.disp ? `${ i.disp.where } → ${ i.disp.target || '' } ${ i.disp.how || '' }` : null ] ] ),
             h( 'div', { class: 'cols' }, textBlock( 'Look', i.look ), textBlock( 'Why new', i.why_new ), textBlock( 'Algorithm', i.algorithm ), textBlock( 'SIMD plan', i.simd_plan ), textBlock( 'Continuity', i.continuity ), textBlock( 'Params', i.params ), textBlock( 'Risks', i.risks ), textBlock( 'Cost note', i.cost_note ) ) ); } }, 'full entry' ),
-          det );
+          det ) );
         list.append( row );
       }
       if( l.length > 400 ) list.append( h( 'p', { class: 'small mut' }, 'Showing the first 400; narrow the search.' ) );
@@ -2622,9 +2681,9 @@ RENDER.trail = root =>
     const search = h( 'input', { type: 'search', id: 'trail-search', placeholder: 'search all text', oninput: () => { st.q = search.value; apply(); } } );
     const catSel = h( 'select', { onchange: () => { st.cat = catSel.value; apply(); } }, h( 'option', { value: '' }, 'all categories' ), cats.map( c => h( 'option', { value: c }, c ) ) );
     const orSel = h( 'select', { onchange: () => { st.origin = orSel.value; apply(); } }, h( 'option', { value: '' }, 'all origins' ), origins.map( c => h( 'option', { value: c }, c ) ) );
-    const onlySel = h( 'select', { onchange: () => { st.only = onlySel.value; apply(); } }, [ [ '', 'everything' ], [ 'queued', 'queued only' ], [ 'unqueued', 'never queued' ], [ 'judged', 'judged in the tournament' ], [ 'sources', 'with sources' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
+    const onlySel = h( 'select', { onchange: () => { st.only = onlySel.value; apply(); } }, [ [ '', 'everything' ], [ 'queued', 'queued only' ], [ 'unqueued', 'never queued' ], [ 'judged', 'judged in the tournament' ], [ 'second-pass', 'prototype only, not judged' ], [ 'covered', 'covered by a real node' ], [ 'sources', 'with sources' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
     host.textContent = '';
-    host.append( h( 'div', { class: 'tiles' }, tile( t.ideas.length, 'merged ideas' ), tile( t.ideas.filter( i => i.queue ).length, 'queued' ), tile( t.ideas.filter( i => i.judged ).length, 'judged' ), tile( t.sources_n, 'with sources' ) ),
+    host.append( h( 'div', { class: 'tiles' }, tile( t.ideas.length, 'merged ideas' ), tile( t.ideas.filter( i => i.queue ).length, 'queued' ), tile( t.ideas.filter( i => i.judged ).length, 'judged' ), tile( D.counts.second_pass, 'prototype only, not judged' ), tile( D.counts.covered, 'covered by a real node' ), tile( t.sources_n, 'with sources' ) ),
       h( 'div', { class: 'filters' }, search, catSel, orSel, onlySel, count ), list );
     apply();
   } ).catch( e => { host.textContent = 'trail failed to load: ' + e.message; } );
@@ -2640,8 +2699,14 @@ function renderNotes( root, M )
   put( root, 
     h( 'h2', null, 'Honest notes' ),
     h( 'p', { class: 'lead' }, 'Process numbers, what was not verified, what the panel said is missing, and findings made along the way.' ),
+    N.second_pass ? [ h( 'h3', null, 'Ideas with images, and the ones nobody judged' ),
+      h( 'div', { class: 'tiles' }, tile( p.with_images, 'ideas with images' ), tile( p.judged_ideas, 'prototyped and judged' ), tile( p.second_pass, 'prototyped, not judged' ), tile( p.covered, 'shown through a real node' ) ),
+      h( 'div', { class: 'stack' }, N.second_pass.text.map( x => h( 'p', { class: 'small', style: 'max-width:80ch' }, x ) ) ),
+      h( 'details', null, h( 'summary', null, `Ideas not judged whose straddling c0 ratio is under 3 (${ Object.keys( N.second_pass.continuity ).length })` ),
+        h( 'p', { class: 'small mut' }, 'Open one for its text: most are steep or jump by design, and a few have a real step.' ),
+        h( 'p', { class: 'small' }, Object.entries( N.second_pass.continuity ).map( ( [ id, v ], i ) => [ i ? ', ' : '', h( 'a', { href: '#', onclick: e => { e.preventDefault(); openIdea( id ); } }, id ), ` ${ fmt( v.plain, 2 ) } to ${ fmt( v.straddle, 2 ) }` ] ) ) ) ] : null,
     h( 'h3', null, 'Process numbers' ),
-    h( 'div', { class: 'tiles' }, p.raw_ideas ? tile( p.raw_ideas, 'raw ideas' ) : null, tile( p.merged_ideas, 'merged (master.json)' ), tile( p.queued, 'queued (queue.json)' ), tile( p.families, 'families' ), tile( p.judged_ideas, 'judged (ranked.json)' ), tile( p.panel_lenses, 'panel lenses' ), tile( p.discovery_entries, 'discovery entries' ), tile( p.discovery_images, 'discovery images on disk' ), tile( p.proto_count, 'prototypes in protos.wasm' ), tile( p.images_packed, 'images packed into this page' ) ),
+    h( 'div', { class: 'tiles' }, p.raw_ideas ? tile( p.raw_ideas, 'raw ideas' ) : null, tile( p.merged_ideas, 'merged (master.json)' ), tile( p.queued, 'queued (queue.json)' ), tile( p.families, 'families' ), tile( p.judged_ideas, 'judged (ranked.json)' ), p.second_pass ? tile( p.second_pass, 'prototyped, not judged' ) : null, tile( p.panel_lenses, 'panel lenses' ), tile( p.discovery_entries, 'discovery entries' ), tile( p.discovery_images, 'discovery images on disk' ), tile( p.proto_count, 'prototypes in protos.wasm' ), tile( p.images_packed, 'images packed into this page' ) ),
     h( 'p', { class: 'small mut' }, 'Calls: ', JSON.stringify( p.calls ), '. Judged status: ', JSON.stringify( p.judged ), '. Prototype status in the WASM index: ', JSON.stringify( p.proto_status ), '.' ),
     h( 'h3', null, 'Not verified' ),
     h( 'div', { class: 'stack' }, N.unverified.map( u => h( 'div', { class: 'box warn' }, h( 'p', { class: 'small' }, u.text ), u.source ? h( 'p', { class: 'small mut mono' }, u.source ) : null ) ) ),
@@ -2676,7 +2741,7 @@ async function boot()
   const landedNodes = landedReal().length, kernelsMerged = D.plan.kernels_merged.length;
   const counts = { live: D.ideas.filter( i => i.proto_ok ).length, editor: D.counts.preset_trees, catalog: D.ideas.length, compare: D.families.length, discoveries: D.counts.discoveries, plan: D.plan.n_nodes, trail: D.process.merged_ideas, notes: D.counts.notes };
   for( const a of tabs.children ) a.querySelector( '.n' ).textContent = counts[a.dataset.view];
-  $( '#brand-sub' ).textContent = `${ D.ideas.length } ideas judged · ${ D.plan.n_nodes } nodes planned · ${ landedNodes } landed${ kernelsMerged ? ', ' + kernelsMerged + ' kernels merged' : '' } · data ${ D.generated }`;
+  $( '#brand-sub' ).textContent = `${ D.ideas.length } ideas · ${ D.counts.judged } judged · ${ D.counts.second_pass } prototyped, not judged · ${ D.plan.n_nodes } nodes planned · ${ landedNodes } landed${ kernelsMerged ? ', ' + kernelsMerged + ' kernels merged' : '' } · data ${ D.generated }`;
   // Only the real engine knows which landed nodes it contains; views wait for this before offering a real preview.
   if( landedNodes && D.engines.real ) realReady = Engines.real().then( fn => { realEngineForDefaults = fn; for( const r of landedReal() ) r.inWasm = !!fn.findNode( r.class ); for( const r of D.plan.real ) if( isMember( r ) ) r.inWasm = true; } ).catch( e => { console.warn( 'real engine unavailable', e ); } );
   presetsReady = fetch( 'data/presets.json' ).then( r => { if( !r.ok ) throw new Error( 'presets.json ' + r.status ); return r.json(); } ).then( indexPresets ).catch( e => { console.warn( 'preset trees unavailable', e ); } );
