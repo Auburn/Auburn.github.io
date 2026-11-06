@@ -58,7 +58,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; min-width: 0; }
 /* top bar */
 .top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9; background: var(--bg); border-bottom: 1px solid var(--line); margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px))) calc(-1 * max(16px, env(safe-area-inset-right, 0px))); padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); }
 .top .wrap { display: flex; align-items: center; gap: 16px; min-height: 48px; }
-.brand { display: flex; flex-direction: column; line-height: 1.1; padding-block: 6px; }
+.brand { display: flex; flex-direction: column; line-height: 1.1; padding-block: 6px; max-width: 340px; flex: 0 1 auto; }
 .brand .sub { font-size: 12px; color: var(--mut); }
 nav.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; }
 nav.tabs::-webkit-scrollbar { display: none; }
@@ -96,6 +96,20 @@ section.view > *, .stack > *, .row > * { min-width: 0; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; min-width: 0; text-align: left; padding: 0; }
 .card:hover { border-color: var(--accent); }
+.pill.pcall.low { color: var(--bad); }
+.pill.pmean { color: var(--fg); background: var(--panel2); border-color: var(--line2); }
+.pill.round { color: var(--mut); border-color: var(--line2); font-weight: 400; }
+.ctl.time .k { color: var(--accent); font-weight: 700; }
+.lookgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.r2nav { padding: 6px 0; }
+.r2nav .chips { flex-wrap: wrap; }
+.idlist { display: flex; flex-wrap: wrap; gap: 4px; }
+.idlist .chip { white-space: normal; text-align: left; font-size: 12px; padding: 2px 8px; }
+td.scoreCell { text-align: right; font: 12px var(--mono); }
+.tbl table.wide { min-width: 900px; }
+.tbl table.wide td, .tbl table.wide th { overflow-wrap: break-word; }
+.rankthumb { width: 64px; min-width: 64px; max-width: none; aspect-ratio: 2 / 1; object-fit: cover; display: block; border-radius: 3px; background: var(--canvas); }
+tr.lowrow td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 .card .th { aspect-ratio: 2 / 1; background: var(--canvas); width: 100%; max-width: 100%; object-fit: cover; display: block; }
 .dgrid .card .th { aspect-ratio: 3 / 2; object-fit: contain; }
 .card .body { padding: 8px 10px 10px; display: grid; gap: 5px; }
@@ -255,7 +269,7 @@ button.toed:hover { background: var(--accent); color: var(--accent-ink); }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th, td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
 th { color: var(--mut); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; border-top: 0; }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12px; }
+td.num, th.num { overflow-wrap: normal; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12px; }
 tr.exp > td { background: var(--panel); }
 tr.click { cursor: pointer; } tr.click:hover td { background: var(--panel); }
 
@@ -340,6 +354,7 @@ svg .dot { opacity: .85; }
   <section class="view" id="v-live"></section>
   <section class="view" id="v-editor" hidden></section>
   <section class="view" id="v-catalog" hidden></section>
+  <section class="view" id="v-round2" hidden></section>
   <section class="view" id="v-compare" hidden></section>
   <section class="view" id="v-discoveries" hidden></section>
   <section class="view" id="v-plan" hidden></section>
@@ -376,7 +391,7 @@ const esc = s => String( s ?? '' ).replace( /[&<>"]/g, c => ( { '&': '&amp;', '<
 const fmt = ( n, d = 2 ) => n === null || n === undefined || isNaN( n ) ? '–' : ( +n ).toFixed( d );
 const WORKERS = Math.max( 1, Math.min( 3, ( navigator.hardwareConcurrency || 2 ) - 1 ) );
 const CALL_LABEL = { 'ship': 'ship', 'ship-as-mode': 'mode', 'showcase': 'showcase', 'graph-recipe': 'recipe', 'drop': 'drop' };
-const STATUS_LABEL = { real: 'real node', planned: 'planned node', reserve: 'reserve', recipe: 'graph recipe', dropped: 'dropped', prototype: 'judged, no plan', 'proto-only': 'prototype only, not judged', covered: 'covered by a real node' };
+const STATUS_LABEL = { real: 'real node', planned: 'planned node', reserve: 'reserve', recipe: 'graph recipe', dropped: 'dropped', prototype: 'judged, no plan', 'proto-only': 'prototype, panel scored', covered: 'covered by a real node' };
 const LENS_LABEL = { 'artist-terrain': 'terrain artist', 'artist-material': 'material artist', 'voxel-engineer': 'voxel engineer', 'maintainer': 'maintainer', 'graphics-researcher': 'graphics researcher', 'creative': 'creative coder' };
 
 let toastT = 0;
@@ -1223,6 +1238,7 @@ class Preview
     const e = this.pe.index.ideas[id];
     if( !e ) { this.fail( new Error( 'no prototype for ' + id ) ); return; }
     this.idea = id; this.e = e; this.params = Object.assign( {}, e.params || {} ); this.presetIdx = 0;
+    if( e.round2 && this.o.seed === undefined ) { this.seed = ( e.view && e.view.seed ) ?? 1337; if( this.seedIn ) this.seedIn.value = this.seed; }
     this.window = this.o.window || ( e.view && e.view.window ) || 8;
     if( !e.has3d && ( this.mode === '3d' || this.mode === 'vol' ) ) this.mode = '2d';
     const opts = Object.assign( this.viewOpts(), { idea: id, onParams: ( controls ) => this.buildProtoControls( controls ) } );
@@ -1267,6 +1283,7 @@ class Preview
     this.presetIdx = i; this.params = Object.assign( {}, p.params ); this.ctls.dataset.keys = '';
     const hint = this.e.view || {}, v = p.view || {}, opts = { proto: this.e.proto, params: p.params, iso: v.iso ?? hint.iso ?? 0 };
     if( v.hscale !== undefined ) { this.hscale = v.hscale; opts.hscale = v.hscale; }
+    if( this.e.round2 ) { this.window = v.window ?? hint.window ?? 8; opts.window = this.window; this.seed = v.seed ?? hint.seed ?? 1337; opts.seed = this.seed; if( this.seedIn ) this.seedIn.value = this.seed; }
     this.set( opts ); this.showSettings();
   }
   buildProtoControls( controls )
@@ -1275,11 +1292,15 @@ class Preview
     if( this.ctls.dataset.keys === keys && this.ctls.dataset.proto === this.view.protoKey ) return;
     this.ctls.dataset.keys = keys; this.ctls.dataset.proto = this.view.protoKey;
     this.ctls.textContent = '';
+    const motion = ( ideaById.get( this.idea ) || {} ).motion, timeKey = motion && motion.param;
+    if( timeKey ) controls = [ ...controls.filter( c => c.key === timeKey ), ...controls.filter( c => c.key !== timeKey ) ];
+    if( timeKey && controls.some( c => c.key === timeKey ) ) this.ctls.append( h( 'p', { class: 'small mut pv-hint' }, `A motion idea: move ${ timeKey } to see it change. The panel saw it as still frames.`, motion.best_range ? ' ' + String( motion.best_range ).split( /(?<=\.)\s/ )[0] : '' ) );
+    if( timeKey && motion.range ) controls = controls.map( c => c.key === timeKey ? Object.assign( {}, c, { min: motion.range[0], max: Math.max( motion.range[1], c.value ), step: ( motion.range[1] - motion.range[0] ) / 300 } ) : c );
     for( const c of controls )
     {
       const val = h( 'span', { class: 'v' }, +( +c.value ).toPrecision( 5 ) );
       const input = h( 'input', { type: 'range', min: c.min, max: c.max, step: c.step, value: c.value, id: 'pv-' + this.idea + '-' + c.key } );
-      const row = h( 'label', { class: 'ctl' + ( c.isSet ? ' set' : '' ), title: c.modeLike ? 'mode-like integer: the read set may change' : c.int ? 'integer' : '' },
+      const row = h( 'label', { class: 'ctl' + ( c.isSet ? ' set' : '' ) + ( c.key === timeKey ? ' time' : '' ), title: c.modeLike ? 'mode-like integer: the read set may change' : c.int ? 'integer' : '' },
         h( 'span', { class: 'k' }, c.key + ( c.modeLike ? ' #' : '' ) ), input, val );
       input.oninput = () => { const v = +input.value; val.textContent = +v.toPrecision( 5 ); row.classList.add( 'set' ); this.params[c.key] = v; this.live( { params: { [c.key]: v } } ); this.showSettings(); };
       this.ctls.append( row );
@@ -1598,7 +1619,7 @@ function more() { if( !moreP ) moreP = fetch( 'data/more.json' ).then( r => { if
 const ideaById = new Map();
 const famById = new Map();
 const previews = { live: null, modal: null, compare: [] };
-const VIEWS = [ [ 'live', 'Live' ], [ 'editor', 'Editor' ], [ 'catalog', 'Catalog' ], [ 'compare', 'Compare' ], [ 'discoveries', 'Discoveries' ], [ 'plan', 'Plan' ], [ 'trail', 'Trail' ], [ 'notes', 'Notes' ] ];
+const VIEWS = [ [ 'live', 'Live' ], [ 'editor', 'Editor' ], [ 'catalog', 'Catalog' ], [ 'round2', 'Round 2' ], [ 'compare', 'Compare' ], [ 'discoveries', 'Discoveries' ], [ 'plan', 'Plan' ], [ 'trail', 'Trail' ], [ 'notes', 'Notes' ] ];
 const rendered = new Set();
 let current = null;
 
@@ -1627,8 +1648,22 @@ const statusPill = it => h( 'span', { class: 'pill st-' + it.status, title: it.d
 const famChip = f => f ? h( 'span', { class: 'fam' }, f ) : null;
 // Judged in the tournament? Everything else has no scores, no rank and no family, and shows nothing in those places.
 const isJudged = it => it.rank !== null && it.rank !== undefined;
-const ideaLabel = it => isJudged( it ) ? '#' + it.rank + ' ' + it.name + ' (' + it.family + ')' : it.name + ' (prototype only, not judged)';
-const protoCallPill = it => it.prototyper_call ? h( 'span', { class: 'pill pcall', title: 'What the author of this prototype said about their own work. Nobody judged it.' }, 'prototyper’s call: ' + it.prototyper_call + ( it.merged_into ? ' into ' + it.merged_into : '' ) ) : null;
+const ROUND_LABEL = { round1: 'round 1', 'second-pass': 'second pass', round2: 'round 2', covered: 'covered' };
+const hasPanel = it => it.panel_mean !== null && it.panel_mean !== undefined;
+const ROUND1_PANEL = 'Round 1: mean of its panel of six lenses, who also saw the critic’s prose.';
+const NEW_PANEL = 'Scored by a six-judge panel from images, with no per-family critic and no adversarial re-measure.';
+const PANEL_LIMITS = 'The judges saw motion ideas as stills, and most saw 3D volumes only at thumbnail size.';
+const panelTitle = it => 'Panel mean, 0 to 10. ' + ( isJudged( it ) ? ROUND1_PANEL : NEW_PANEL + ' ' + PANEL_LIMITS );
+const panelPill = it => hasPanel( it ) ? h( 'span', { class: 'pill pmean', title: panelTitle( it ) }, 'panel ' + fmt( it.panel_mean, 2 ) ) : null;
+const roundPill = it => it.round ? h( 'span', { class: 'pill round' }, ROUND_LABEL[it.round] || it.round ) : null;
+const keeperUnder5 = it => it.prototyper_call === 'keeper' && hasPanel( it ) && it.panel_mean < 5;
+const byPanel = ( a, b ) => ( b.panel_mean ?? -1 ) - ( a.panel_mean ?? -1 ) || ( a.panel_rank ?? 1e9 ) - ( b.panel_rank ?? 1e9 ) || ( a.name < b.name ? -1 : 1 );
+const ideaLabel = it => isJudged( it ) ? '#' + it.rank + ' ' + it.name + ' (' + it.family + ')' : it.name + ' (' + ( ROUND_LABEL[it.round] || '' ) + ( hasPanel( it ) ? ', panel ' + fmt( it.panel_mean, 2 ) : '' ) + ')';
+const ideaOptions = list => [ [ 'round2', 'Round 2, by panel mean' ], [ 'second-pass', 'Second pass, by panel mean' ], [ 'round1', 'Round 1, by rank' ] ].map( ( [ r, label ] ) => h( 'optgroup', { label }, list.filter( i => i.round === r ).sort( r === 'round1' ? ( a, b ) => a.rank - b.rank : byPanel ).map( i => h( 'option', { value: i.id }, ideaLabel( i ) ) ) ) );
+const openLink = ( id, label ) => ideaById.has( id ) ? h( 'a', { href: '#', onclick: e => { e.preventDefault(); openIdea( id ); } }, label || id ) : ( label || id );
+const scanText = sc => !sc ? null : sc.error ? 'no result: ' + sc.error : `${ sc.real_jumps } crossings of a real jump${ sc.real_jumps ? `, seam length about ${ fmt( sc.seam_length, 1 ) }, worst ${ fmt( sc.worst, 2 ) }` : '' }, ${ sc.steep } steep segments`;
+const SCAN_HOW = 'A bisection scan at the default render, in 2D only, over a 7 by 7 window. Jumps smaller than about 0.1 are not counted. Many outputs jump by design, so this is a number to read with the image, not a verdict.';
+const protoCallPill = it => it.prototyper_call ? h( 'span', { class: 'pill pcall' + ( keeperUnder5( it ) ? ' low' : '' ), title: 'What the author of this prototype said about their own work. It is not a judge’s verdict; the panel mean is the independent number.' + ( keeperUnder5( it ) ? ' Its author called it a keeper and the panel scored it under 5.' : '' ) }, 'prototyper’s call: ' + it.prototyper_call + ( it.merged_into ? ' into ' + it.merged_into : '' ) ) : null;
 function costShort( c )
 {
   if( !c || !c.text ) return h( 'span', { class: 'cost' }, 'no cost given' );
@@ -1640,13 +1675,17 @@ function ideaCard( it )
   return h( 'button', { class: 'card', onclick: () => openIdea( it.id ), 'aria-label': it.name },
     img( it.thumb, { class: 'th', alt: it.name + ' thumbnail' } ),
     h( 'div', { class: 'body' },
-      h( 'div', { class: 'name' }, h( 'span', null, it.name ), isJudged( it ) ? h( 'span', { class: 'num', title: 'combined score: (critic mean + panel mean) / 2' }, fmt( it.combined, 2 ) ) : null ),
+      h( 'div', { class: 'name' }, h( 'span', null, it.name ), hasPanel( it ) ? h( 'span', { class: 'num', title: panelTitle( it ) }, 'panel ' + fmt( it.panel_mean, 2 ) ) : null ),
       h( 'div', { class: 'one' }, it.one_liner || '' ),
-      h( 'div', { class: 'meta' }, famChip( it.family || it.category ), callPill( it.call ), statusPill( it ), protoCallPill( it ), it.kind === 'covered' ? null : costShort( it.cost ) ) ) );
+      h( 'div', { class: 'meta' }, roundPill( it ), famChip( it.family || it.category ), callPill( it.call ), it.status === 'proto-only' ? null : statusPill( it ), protoCallPill( it ), isJudged( it ) ? h( 'span', { class: 'num small mut', title: 'combined score, round 1 only: (critic mean + panel mean) / 2. The later ideas have no critic, so this is not comparable across rounds.' }, 'combined ' + fmt( it.combined, 2 ) ) : null, it.kind === 'covered' ? null : costShort( it.cost ) ) ) );
 }
 function scoreTiles( it )
 {
-  if( !isJudged( it ) ) return h( 'p', { class: 'small mut' }, it.kind === 'covered' ? 'Not judged on its own: a real node covers this idea, so it has no scores and no rank here.' : 'Not judged: no critic or panel saw this prototype, so it has no scores and no rank.' );
+  if( it.kind === 'covered' ) return h( 'p', { class: 'small mut' }, 'Not judged on its own: a real node covers this idea, so it has no scores and no rank here.' );
+  if( !isJudged( it ) && hasPanel( it ) ) return h( 'div', { class: 'stack', style: 'gap:6px' },
+    h( 'div', { class: 'scores' }, [ [ 'panel mean (' + it.panel_n + ')', it.panel_mean, 10 ], [ 'lowest judge', it.panel_min, 10 ], [ 'highest judge', it.panel_max, 10 ], [ 'place of 218', it.panel_rank, null ] ].map( ( [ k, v, max ] ) => h( 'div', { class: 'score' }, h( 'div', { class: 'v' }, max ? fmt( v, max && Number.isInteger( v ) ? 0 : 2 ) : '#' + v ), h( 'div', { class: 'k' }, k ), max ? h( 'div', { class: 'bar' }, h( 'i', { style: 'width:' + ( v / max * 100 ) + '%' } ) ) : null ) ) ),
+    h( 'p', { class: 'small mut' }, NEW_PANEL, ' ', PANEL_LIMITS, keeperUnder5( it ) ? h( 'b', { style: 'color:var(--bad)' }, ' Its author called it a keeper; the panel scored it under 5.' ) : null ) );
+  if( !isJudged( it ) ) return null;
   const tiles = [ [ 'combined', it.combined, 10 ], [ 'critic', it.critic_mean, 10 ], [ 'panel (' + it.panel_n + ')', it.panel_mean, 10 ], [ 'rank', it.rank, null ] ];
   return h( 'div', { class: 'scores' }, tiles.map( ( [ k, v, max ] ) => h( 'div', { class: 'score' }, h( 'div', { class: 'v' }, max ? fmt( v, 2 ) : '#' + v ), h( 'div', { class: 'k' }, k ), max ? h( 'div', { class: 'bar' }, h( 'i', { style: 'width:' + ( v / max * 100 ) + '%' } ) ) : null ) ) );
 }
@@ -1678,6 +1717,27 @@ function scoreStrip( ideas, onPick )
   return svg;
 }
 
+function panelStrip( ideas, onPick )
+{
+  const W = 900, H = 96, pad = 86, rows = { round1: 0, 'second-pass': 1, round2: 2 }, ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS( ns, 'svg' );
+  svg.setAttribute( 'viewBox', `0 0 ${ W } ${ H }` ); svg.setAttribute( 'class', 'strip' ); svg.setAttribute( 'role', 'img' ); svg.setAttribute( 'aria-label', 'panel mean of every scored idea, one row per round' );
+  const x = v => pad + ( v - 1 ) / 8 * ( W - pad - 16 );
+  const mk = ( t, a ) => { const e = document.createElementNS( ns, t ); for( const k in a ) e.setAttribute( k, a[k] ); return e; };
+  for( let v = 1; v <= 9; v++ ) { svg.append( mk( 'line', { x1: x( v ), x2: x( v ), y1: 6, y2: H - 22, class: 'grid', 'stroke-width': 1 } ) ); const t = mk( 'text', { x: x( v ), y: H - 8, 'text-anchor': 'middle' } ); t.textContent = v; svg.append( t ); }
+  for( const [ r, i ] of Object.entries( rows ) ) { const t = mk( 'text', { x: 2, y: 18 + i * 22, 'font-size': 12 } ); t.textContent = ROUND_LABEL[r]; svg.append( t ); }
+  const colour = { round1: 'var(--mode)', 'second-pass': 'var(--show)', round2: 'var(--ship)' };
+  for( const it of ideas )
+  {
+    if( !hasPanel( it ) || rows[it.round] === undefined ) continue;
+    const c = mk( 'circle', { cx: x( it.panel_mean ), cy: 14 + rows[it.round] * 22, r: 4, fill: colour[it.round], 'fill-opacity': .75, class: 'dot', style: 'cursor:pointer' } );
+    const title = document.createElementNS( ns, 'title' ); title.textContent = `${ it.name } panel ${ fmt( it.panel_mean, 2 ) } (${ ROUND_LABEL[it.round] })`; c.append( title );
+    c.addEventListener( 'click', () => onPick( it.id ) );
+    svg.append( c );
+  }
+  return svg;
+}
+
 // =================================================================== LIVE
 const RENDER = {};
 RENDER.live = async root =>
@@ -1685,6 +1745,7 @@ RENDER.live = async root =>
   await Promise.all( [ realReady, presetsReady ] );
   const landed = landedReal(), real = landed.filter( r => r.inWasm ), notRunnable = landed.filter( r => !r.inWasm );
   const top = D.ideas.filter( i => i.proto_ok && isJudged( i ) ).slice( 0, 10 );
+  const topR2 = D.ideas.filter( i => i.proto_ok && i.round === 'round2' ).sort( byPanel ).slice( 0, 8 );
   const chips = h( 'div', { class: 'chips scroll' } );
   const host = h( 'div' );
   const info = h( 'div', { class: 'box', style: 'display:grid;gap:6px' } );
@@ -1700,12 +1761,12 @@ RENDER.live = async root =>
       const it = ideaById.get( key );
       previews.live = new Preview( host, { kind: 'proto', idea: key } );
       info.textContent = '';
-      info.append( h( 'div', { class: 'row' }, h( 'h3', null, it.name ), famChip( it.family ), callPill( it.call ), statusPill( it ), protoCallPill( it ), isJudged( it ) ? h( 'span', { class: 'num mut' }, 'combined ' + fmt( it.combined ) ) : null ),
+      info.append( h( 'div', { class: 'row' }, h( 'h3', null, it.name ), roundPill( it ), famChip( it.family || it.category ), callPill( it.call ), it.status === 'proto-only' ? null : statusPill( it ), protoCallPill( it ), panelPill( it ), isJudged( it ) ? h( 'span', { class: 'num mut' }, 'combined ' + fmt( it.combined ) ) : null ),
         h( 'p', null, it.one_liner ),
-        h( 'p', { class: 'small mut' }, 'Scalar prototype compiled to WASM, running at its ' + ( isJudged( it ) ? 'judged' : 'plain, not judged,' ) + ' parameters. Sliders are the parameters the prototype reads; only moved ones are sent. ',
+        h( 'p', { class: 'small mut' }, 'Scalar prototype compiled to WASM, running at its ' + ( isJudged( it ) ? 'judged' : 'plain' ) + ' parameters. ' + ( isJudged( it ) ? '' : NEW_PANEL + ' ' ) + 'Sliders are the parameters the prototype reads; only moved ones are sent. ',
           it.cost && it.cost.text ? 'Cost text: ' + it.cost.text + ' (' + it.cost.basis + ').' : 'No cost text.' ),
         h( 'div', { class: 'row' }, h( 'button', { onclick: () => openIdea( key ) }, 'Open detail' ), h( 'button', { onclick: () => Compare.add( key, true ) }, 'Add to compare' ) ) );
-      if( it.hq ) info.append( h( 'div', { class: 'stack', style: 'gap:6px' }, h( 'h4', null, isJudged( it ) ? 'High resolution stills, judged parameters' : 'Stills of the prototype, not judged' ), stillsGrid( ideaStills( it, it.hq ) ) ) );
+      if( it.hq ) info.append( h( 'div', { class: 'stack', style: 'gap:6px' }, h( 'h4', null, isJudged( it ) ? 'High resolution stills, judged parameters' : 'Stills of the prototype' ), stillsGrid( ideaStills( it, it.hq ) ) ) );
     }
     else
     {
@@ -1721,20 +1782,21 @@ RENDER.live = async root =>
   }
   for( const r of real ) chips.append( h( 'button', { class: 'chip', data: { key: 'real:' + r.stem }, onclick: () => show( 'real', r.stem ) }, r.class, ' ', h( 'span', { class: 'pill kind real' }, 'real' ) ) );
   for( const it of top ) chips.append( h( 'button', { class: 'chip', data: { key: 'proto:' + it.id }, onclick: () => show( 'proto', it.id ) }, '#' + it.rank + ' ' + it.name ) );
+  for( const it of topR2 ) chips.append( h( 'button', { class: 'chip', data: { key: 'proto:' + it.id }, title: 'round 2, panel mean ' + fmt( it.panel_mean, 2 ), onclick: () => show( 'proto', it.id ) }, it.name, ' ', h( 'span', { class: 'pill round' }, 'R2' ) ) );
   const more = h( 'select', { class: 'small', onchange: () => { if( more.value ) show( 'proto', more.value ); } }, h( 'option', { value: '' }, 'any other prototype…' ),
-    D.ideas.filter( i => i.proto_ok ).map( i => h( 'option', { value: i.id }, ideaLabel( i ) ) ) );
+    ideaOptions( D.ideas.filter( i => i.proto_ok ) ) );
   const eng = D.engines;
   put( root, 
     h( 'div', { class: 'stack' },
       h( 'h2', null, 'Live previews' ),
-      h( 'p', { class: 'lead' }, real.length ? `${ real.length } real node${ real.length > 1 ? 's' : '' } can run here; the rest are scalar prototypes, ${ D.counts.judged } judged in the tournament and ${ D.counts.second_pass } made afterwards and not judged. ` : 'Every preview here is a scalar prototype compiled to WASM. ',
+      h( 'p', { class: 'lead' }, real.length ? `${ real.length } real node${ real.length > 1 ? 's' : '' } can run here; the rest are scalar prototypes: ${ D.counts.judged } judged in the tournament, ${ D.counts.second_pass } from the second pass and ${ D.ideas.filter( i => i.round === 'round2' && i.proto_ok ).length } from round 2, the last two groups scored by a panel only. ` : 'Every preview here is a scalar prototype compiled to WASM. ',
         notRunnable.length ? `${ notRunnable.map( r => r.class ).join( ', ' ) } ${ notRunnable.length > 1 ? 'have' : 'has' } landed with a native port and report, but the page’s real-node WASM build does not contain ${ notRunnable.length > 1 ? 'them' : 'it' } yet: see the Plan tab for images, gates and bench. ` : '',
         `Top of the ranking first. A real node is edited on its FastNoise node graph, which drives the preview beside it; prototypes are not FastNoise nodes, so they have sliders. Drag the preview to pan, or use two fingers on a touch screen; + and − zoom. Output and display under each preview set the render size and how large it shows; your choices stay in this browser. Renders run in web workers and refine in passes, and a long one shows its progress and can be cancelled.` ) ),
     h( 'div', { class: 'row' }, chips, more ),
     host, info,
     h( 'div', { class: 'tiles' },
-      tile( D.counts.judged, 'ideas judged' ), tile( D.counts.second_pass, 'prototyped, not judged' ), tile( D.counts.covered, 'covered by real nodes' ), tile( D.families.length, 'families' ), tile( D.plan.counts ? D.plan.counts.planned_nodes : '–', 'nodes planned' ),
-      tile( landed.length, 'real nodes landed' ), tile( D.plan.kernels_merged.length, 'kernels merged' ), tile( D.counts.discoveries, 'discoveries' ), tile( D.process.merged_ideas, 'ideas in the trail' ) ),
+      tile( D.counts.judged, 'judged with a critic' ), tile( D.counts.second_pass + D.counts.round2, 'scored by the panel only' ), tile( D.counts.covered, 'covered by real nodes' ), tile( D.families.length, 'families' ), tile( D.plan.counts ? D.plan.counts.planned_nodes : '–', 'nodes planned' ),
+      tile( landed.length, 'real nodes landed' ), tile( D.plan.kernels_merged.length, 'kernels merged' ), tile( D.counts.discoveries, 'discoveries' ), tile( D.process.trail_ideas, 'ideas in the trail' ) ),
     h( 'p', { class: 'small mut' }, 'Engines: prototypes ', eng.proto ? `protos.wasm ${ ( eng.proto.bytes / 1e6 ).toFixed( 2 ) } MB, built ${ eng.proto.built || '' }` : 'missing', '; real nodes ', eng.real ? `${ eng.real.source } (${ eng.real.label }), ${ ( eng.real.bytes / 1e6 ).toFixed( 2 ) } MB, built ${ eng.real.built }` : 'missing', '; node editor ', eng.editor ? `${ ( eng.editor.first_load_bytes / 1e6 ).toFixed( 2 ) } MB, built ${ eng.editor.built }, loaded the first time a graph is needed` : 'missing', '. Data generated ', D.generated, '.' ) );
   if( real.length ) show( 'real', real[0].stem ); else if( top.length ) show( 'proto', top[0].id );
 };
@@ -2001,7 +2063,8 @@ RENDER.editor = async root =>
 // =================================================================== CATALOG
 RENDER.catalog = root =>
 {
-  const st = { family: '', call: new Set(), status: new Set(), cost: '', sort: 'combined', q: '', pcall: '' };
+  const st = { family: '', call: new Set(), status: new Set(), cost: '', sort: 'panel', q: '', pcall: '', round: '', band: '', low: false };
+  const band = it => !hasPanel( it ) ? 'none' : it.panel_mean >= 7 ? 'a' : it.panel_mean >= 6 ? 'b' : it.panel_mean >= 5 ? 'c' : 'd';
   const judged = D.ideas.filter( isJudged );
   const grid = h( 'div', { class: 'grid' } );
   const count = h( 'span', { class: 'small mut' } );
@@ -2009,11 +2072,11 @@ RENDER.catalog = root =>
   function apply()
   {
     const q = st.q.toLowerCase();
-    let list = D.ideas.filter( i => ( !st.family || i.family === st.family ) && ( !st.call.size || st.call.has( i.call ) ) && ( !st.status.size || st.status.has( i.status ) ) && ( !st.pcall || i.prototyper_call === st.pcall )
+    let list = D.ideas.filter( i => ( !st.family || i.family === st.family ) && ( !st.call.size || st.call.has( i.call ) ) && ( !st.status.size || st.status.has( i.status ) ) && ( !st.pcall || i.prototyper_call === st.pcall ) && ( !st.round || i.round === st.round ) && ( !st.band || band( i ) === st.band ) && ( !st.low || keeperUnder5( i ) )
       && ( !st.cost || bucket( i.cost.ns ) === st.cost ) && ( !q || ( i.name + ' ' + i.id + ' ' + i.one_liner + ' ' + ( i.family || i.category || '' ) + ' ' + ( i.disp.target || '' ) ).toLowerCase().includes( q ) ) );
     // Ideas without a score go after the judged ones when the sort is by score; among themselves, by name.
     const score = f => i => isJudged( i ) ? f( i ) : Infinity;
-    const key = { combined: score( i => -i.combined ), panel: score( i => -i.panel_mean ), critic: score( i => -i.critic_mean ), cost: i => i.cost.ns ?? 1e9, name: i => i.name.toLowerCase(), rank: score( i => i.rank ), wasm: i => i.cost.wasm_ns2 ?? 1e9 }[st.sort];
+    const key = { combined: score( i => -i.combined ), panel: i => hasPanel( i ) ? -i.panel_mean : Infinity, critic: score( i => -i.critic_mean ), cost: i => i.cost.ns ?? 1e9, name: i => i.name.toLowerCase(), rank: score( i => i.rank ), wasm: i => i.cost.wasm_ns2 ?? 1e9 }[st.sort];
     list.sort( ( a, b ) => key( a ) < key( b ) ? -1 : key( a ) > key( b ) ? 1 : a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1 );
     grid.textContent = '';
     list.forEach( i => grid.append( ideaCard( i ) ) );
@@ -2023,19 +2086,25 @@ RENDER.catalog = root =>
   const callBtns = Object.keys( CALL_LABEL ).map( c => { const b = h( 'button', { class: 'chip' } ); b.append( callPill( c ) ); b.onclick = toggle( st.call, c, b ); return b; } );
   const statusBtns = Object.keys( STATUS_LABEL ).map( s => { const b = h( 'button', { class: 'chip' }, STATUS_LABEL[s] ); b.onclick = toggle( st.status, s, b ); return b; } );
   const famSel = h( 'select', { onchange: () => { st.family = famSel.value; apply(); } }, h( 'option', { value: '' }, 'all families' ), D.family_list.map( f => h( 'option', { value: f }, f ) ) );
+  const low = D.ideas.filter( keeperUnder5 ).length;
   const costSel = h( 'select', { onchange: () => { st.cost = costSel.value; apply(); } }, [ [ '', 'any cost' ], [ 'a', '≤ 5 ns' ], [ 'b', '5–20 ns' ], [ 'c', '20–100 ns' ], [ 'd', '> 100 ns' ], [ 'none', 'no figure' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
-  const sortSel = h( 'select', { onchange: () => { st.sort = sortSel.value; apply(); } }, [ [ 'combined', 'sort: combined score' ], [ 'panel', 'sort: panel mean' ], [ 'critic', 'sort: critic mean' ], [ 'cost', 'sort: AVX2 ns figure' ], [ 'wasm', 'sort: WASM scalar ns (2D)' ], [ 'name', 'sort: name' ], [ 'rank', 'sort: rank' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
+  const sortSel = h( 'select', { onchange: () => { st.sort = sortSel.value; apply(); } }, [ [ 'panel', 'sort: panel mean, all rounds' ], [ 'combined', 'sort: combined score, round 1 first' ], [ 'critic', 'sort: critic mean, round 1 first' ], [ 'cost', 'sort: AVX2 ns figure' ], [ 'wasm', 'sort: WASM scalar ns (2D)' ], [ 'name', 'sort: name' ], [ 'rank', 'sort: round 1 rank' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
   const pcallSel = h( 'select', { id: 'cat-pcall', onchange: () => { st.pcall = pcallSel.value; apply(); } }, [ [ '', 'any prototyper’s call' ], [ 'keeper', 'prototyper’s call: keeper' ], [ 'promising', 'prototyper’s call: promising' ], [ 'merged', 'prototyper’s call: merged' ], [ 'weak', 'prototyper’s call: weak' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
+  const roundSel = h( 'select', { id: 'cat-round', onchange: () => { st.round = roundSel.value; apply(); } }, [ [ '', 'all rounds' ], [ 'round2', 'round 2' ], [ 'second-pass', 'second pass' ], [ 'round1', 'round 1' ], [ 'covered', 'covered by a real node' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
+  const bandSel = h( 'select', { id: 'cat-band', onchange: () => { st.band = bandSel.value; apply(); } }, [ [ '', 'any panel mean' ], [ 'a', 'panel 7 or more' ], [ 'b', 'panel 6 to 7' ], [ 'c', 'panel 5 to 6' ], [ 'd', 'panel under 5' ], [ 'none', 'no panel score' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
+  const lowBtn = h( 'button', { class: 'chip', id: 'cat-low', title: 'Their prototypers called these keepers, and the six judges scored them under 5.', onclick: () => { st.low = !st.low; lowBtn.classList.toggle( 'on', st.low ); apply(); } }, 'author’s keeper, panel under 5' );
   const search = h( 'input', { type: 'search', id: 'cat-search', placeholder: 'search name, id, one-liner, planned node', oninput: () => { st.q = search.value; apply(); } } );
   const proc = D.process;
   put( root, 
     h( 'h2', null, 'Catalog of ideas' ),
-    h( 'p', { class: 'lead' }, `All ${ D.ideas.length } merged ideas. ${ D.counts.second_pass } were prototyped later and were not judged, so they show no scores and only their prototyper’s own opinion. ${ D.counts.covered } are covered by a real node and show that node.` ),
-    h( 'p', { class: 'lead' }, `${ judged.length } ideas from ${ D.families.length } families were judged by a critic (5 scores) and ${ D.lenses.length } panel lenses. Combined score = (critic mean + panel mean) / 2. Calls: `,
+    h( 'p', { class: 'lead' }, `All ${ D.ideas.length } ideas with images. ${ judged.length } went through the tournament, with a per-family critic and a panel. ${ D.counts.second_pass } of the second pass and ${ D.counts.round2 } of round 2 were scored by a six-judge panel from images, with no per-family critic and no adversarial re-measure. ${ D.counts.covered } are covered by a real node and show that node. Cards sort by panel mean, the one number all ${ D.counts.panel_scored } scored ideas have. It comes from two separate sittings, so read small differences across rounds with care.` ),
+    h( 'p', { class: 'lead' }, `Keeper, promising, weak and merged are only each prototyper’s opinion of their own work, not a verdict: ${ low } ideas their authors called keepers scored under 5 with the panel. ${ PANEL_LIMITS }` ),
+    h( 'p', { class: 'lead' }, `Round 1: ${ judged.length } ideas from ${ D.families.length } families were judged by a critic (5 scores) and ${ D.lenses.length } panel lenses. Their combined score = (critic mean + panel mean) / 2 stays on their cards; the later ideas have no critic, so it is not a number to compare across rounds. Calls: `,
       Object.entries( proc.calls || {} ).map( ( [ k, v ], i ) => [ i ? ', ' : '', `${ v } ${ k }` ] ), '. Costs keep their basis: most are estimates. The ns figure on a card is the first AVX2 number in the cost text, the low end of a range, and it can be per octave or exclude the source, so open the card for the whole text.' ),
-    h( 'div', { class: 'box' }, h( 'h4', null, 'Combined score by critic call' ), scoreStrip( judged, openIdea ),
+    h( 'div', { class: 'box' }, h( 'h4', null, 'Panel mean by round' ), panelStrip( D.ideas, openIdea ), h( 'p', { class: 'small mut' }, 'Click a dot to open. The later panel was shown round 1 ideas labelled with their panel mean, so that its scale would match; nobody has checked that independently.' ) ),
+    h( 'div', { class: 'box' }, h( 'h4', null, 'Round 1: combined score by critic call' ), scoreStrip( judged, openIdea ),
       h( 'div', { class: 'row small' }, Object.keys( CALL_LABEL ).map( c => callPill( c ) ), h( 'span', { class: 'mut' }, 'rows top to bottom; click a dot to open') ) ),
-    h( 'div', { class: 'filters' }, search, famSel, costSel, sortSel, pcallSel, h( 'span', { class: 'chips' }, callBtns ), h( 'span', { class: 'chips' }, statusBtns ), count ),
+    h( 'div', { class: 'filters' }, search, roundSel, famSel, bandSel, costSel, sortSel, pcallSel, lowBtn, h( 'span', { class: 'chips' }, callBtns ), h( 'span', { class: 'chips' }, statusBtns ), count ),
     grid );
   apply();
 };
@@ -2064,14 +2133,15 @@ async function openIdea( id )
   panel.textContent = '';
   const pvHost = h( 'div' );
   const head = h( 'div', { class: 'mhead' },
-    h( 'div', { class: 'stack', style: 'gap:4px' }, h( 'div', { class: 'row' }, h( 'h2', null, it.name ), h( 'code', null, it.id ), famChip( it.family || it.category ), callPill( it.call ), statusPill( it ), protoCallPill( it ), it.mode_of ? h( 'span', { class: 'small mut' }, 'mode of ' + it.mode_of ) : null ),
+    h( 'div', { class: 'stack', style: 'gap:4px' }, h( 'div', { class: 'row' }, h( 'h2', null, it.name ), h( 'code', null, it.id ), roundPill( it ), famChip( it.family || it.category ), callPill( it.call ), it.status === 'proto-only' ? null : statusPill( it ), protoCallPill( it ), panelPill( it ), it.mode_of ? h( 'span', { class: 'small mut' }, 'mode of ' + it.mode_of ) : null ),
       h( 'p', null, it.one_liner ) ),
     h( 'button', { class: 'x', onclick: closeModal, 'aria-label': 'close' }, '×' ) );
   const tabs = h( 'div', { class: 'tabbar' } ), body = h( 'div', { class: 'stack' } );
-  const sections = it.kind === 'second-pass' ? { overview: () => secondPassTab( it, det ), research: () => researchTab( it, det ) }
+  const sections = it.kind === 'round2' ? { overview: () => protoReportTab( it, det ), panel: () => panelTab( it, det ), origin: () => originTab( it, det ), research: () => researchTab( it, det ) }
+    : it.kind === 'second-pass' ? { overview: () => protoReportTab( it, det ), panel: () => panelTab( it, det ), research: () => researchTab( it, det ) }
     : it.kind === 'covered' ? { overview: () => coveredTab( it, det ), plan: () => planTab( it, det ), research: () => researchTab( it, det ) }
     : { overview: () => overviewTab( it, det ), images: () => imagesTab( det ), critic: () => criticTab( it, det ), panel: () => panelTab( it, det ), plan: () => planTab( it, det ), research: () => researchTab( it, det ) };
-  const labels = { overview: 'Overview', images: `Images (${ det.images.length })`, critic: 'Critic', panel: 'Panel', plan: it.kind === 'covered' ? 'The node' : 'Plan', research: isJudged( it ) ? 'Research' : 'Catalogue text' };
+  const labels = { overview: 'Overview', images: `Images (${ det.images.length })`, critic: 'Critic', panel: isJudged( it ) ? 'Panel' : 'The six judges', origin: 'Where it came from', plan: it.kind === 'covered' ? 'The node' : 'Plan', research: isJudged( it ) ? 'Research' : 'Catalogue text' };
   for( const k of Object.keys( sections ) ) tabs.append( h( 'button', { data: { k }, onclick: () => pick( k ) }, labels[k] ) );
   function pick( k ) { for( const b of tabs.children ) b.classList.toggle( 'on', b.dataset.k === k ); body.textContent = ''; body.append( sections[k]() ); }
   // live preview: real node if landed, else the prototype
@@ -2096,10 +2166,10 @@ async function openIdea( id )
   const capNote = it.hq && it.hq.capped ? h( 'p', { class: 'small mut' }, it.hq.capped ) : null;
   const stills = stillList.length || realList.length ? h( 'div', { class: 'stack', style: 'gap:6px' },
     realList.length ? [ h( 'h4', null, it.kind === 'covered' ? 'Covered by ' + it.covered_by + ': the node’s presets, high resolution' : 'Real node presets, high resolution' ), stillsGrid( realList ) ] : null,
-    stillList.length ? [ h( 'h4', null, isJudged( it ) ? 'Prototype at its judged parameters, high resolution' : it.hq.relief ? 'Prototype, not judged, high resolution' : 'Prototype, not judged' ), stillsGrid( stillList ) ] : null, capNote,
+    stillList.length ? [ h( 'h4', null, isJudged( it ) ? 'Prototype at its judged parameters, high resolution' : it.hq.pair && it.hq.pair.w >= 1500 ? 'Prototype, high resolution, at the parameters of the image its author saved' : 'Prototype, at the parameters of the image its author saved. This copy of the page has smaller stills' ), stillsGrid( stillList ) ] : null, capNote,
     h( 'p', { class: 'small mut' }, 'Open one for 100% with zoom and pan.' ) ) : null;
   put( panel, head, stills, scoreTiles( it ), kinds.length > 1 ? pvBar : pvBar.lastChild && pvBar.lastChild.dataset.k === undefined ? h( 'div', { class: 'row' }, pvBar.lastChild ) : null, pvHost, tabs, body );
-  if( kinds.length ) showPv( kinds[0][0], kinds[0][1] ); else pvHost.append( h( 'p', { class: 'small mut' }, it.kind === 'covered' ? it.covered_by + ' has no live preview in this WASM build.' : 'No runnable prototype for this idea in the WASM build.' ) );
+  if( kinds.length ) showPv( kinds[0][0], kinds[0][1] ); else pvHost.append( h( 'p', { class: 'small mut' }, it.kind === 'covered' ? it.covered_by + ' has no live preview in this WASM build.' : 'No runnable prototype for this idea in the WASM build, so only its stills show.' ) );
   pick( 'overview' );
   panel.scrollTop = 0;
 }
@@ -2128,15 +2198,25 @@ function overviewTab( it, det )
 // Prototypers wrote some of these as a table by mode or dimension.
 const asText = v => v === null || v === undefined || v === '' ? null : typeof v === 'string' ? v : typeof v !== 'object' ? String( v ) : Object.entries( v ).map( ( [ k, x ] ) => k + ': ' + ( x && typeof x === 'object' ? asText( x ).replace( /\n/g, ', ' ) : x ) ).join( '\n' );
 const asBlock = ( title, v ) => textBlock( title, typeof v === 'string' || !v ? v : asText( v ).split( '\n' ).map( l => '- ' + l ).join( '\n' ) );
-function secondPassTab( it, det )
+function protoReportTab( it, det )
 {
-  const me = det.measured || {}, pi = det.proto_index || {}, st = me.c0_step_h || {};
+  const me = det.measured || {}, pi = det.proto_index || {}, st = me.c0_step_h || {}, r2 = it.kind === 'round2';
   const steps = Object.entries( st ).map( ( [ h, v ] ) => 'h ' + h + ': ' + v ).join( ', ' );
   const target = det.merged_into && it.merged_into && ideaById.has( it.merged_into ) ? h( 'a', { href: '#', onclick: e => { e.preventDefault(); openIdea( it.merged_into ); } }, it.merged_into ) : null;
+  const m = it.motion;
+  const lens = l => LENS_LABEL[l] || l;
   return h( 'div', { class: 'stack' },
-    h( 'div', { class: 'box warn' }, h( 'h4', null, 'Prototype only, not judged' ),
-      h( 'p', { class: 'small' }, 'This idea got a prototype after the tournament, so that it would have images and a live preview. No critic or panel has seen it. What follows is the prototyper’s own report and what the harness measured.' ),
-      kv( [ [ 'prototyper’s call', det.prototyper_call + ' (the prototyper on their own work, not a judge’s verdict)' ], [ 'merged into', det.merged_into ? h( 'span', null, target, target && det.merged_into !== it.merged_into ? ' ' : '', det.merged_into === it.merged_into && target ? '' : det.merged_into ) : null ] ] ) ),
+    h( 'div', { class: 'box warn' }, h( 'h4', null, 'Scored by the panel, with no per-family critic' ),
+      h( 'p', { class: 'small' }, r2 ? 'This idea came from the second creative round. ' : 'This idea got a prototype after the tournament, so that it would have images and a live preview. ', NEW_PANEL, ' What follows is the prototyper’s own report, what the harness measured, and the judges’ scores. ', PANEL_LIMITS ),
+      kv( [ [ 'prototyper’s call', det.prototyper_call + ' (the prototyper on their own work, not a judge’s verdict)' ],
+        [ 'panel mean', hasPanel( it ) ? `${ fmt( it.panel_mean, 2 ) } from ${ it.panel_n } judges, lowest ${ it.panel_min }, highest ${ it.panel_max }, place ${ it.panel_rank } of the 218 this panel scored` : null ],
+        [ 'on a judge’s top list', it.top_lists && it.top_lists.length ? it.top_lists.map( lens ).join( ', ' ) : null ], [ 'a judge’s best look', it.best_look && it.best_look.length ? it.best_look.map( lens ).join( ', ' ) : null ],
+        [ 'called overrated by', it.overrated_by && it.overrated_by.length ? it.overrated_by.map( lens ).join( ', ' ) : null ], [ 'called underrated by', it.underrated_by && it.underrated_by.length ? it.underrated_by.map( lens ).join( ', ' ) : null ],
+        [ 'in the next plan', it.next_plan ? `${ it.next_plan.where }: ${ it.next_plan.detail || '' }. A plan, nothing built.` : null ],
+        [ 'merged into', det.merged_into ? h( 'span', null, target, target && det.merged_into !== it.merged_into ? ' ' : '', det.merged_into === it.merged_into && target ? '' : asText( det.merged_into ) ) : null ], [ 'why merged', asText( det.merged_why ) ], [ 'the prototyper’s note', det.status_note ] ] ),
+      keeperUnder5( it ) ? h( 'p', { class: 'small', style: 'margin-top:6px;color:var(--bad)' }, 'Its author called it a keeper and the panel scored it under 5.' ) : null ),
+    m ? h( 'div', { class: 'box' }, h( 'h4', null, 'Motion' ), h( 'p', { class: 'small' }, m.param ? `Move ${ m.param } in the sliders of the live preview to see it change. It is the top slider.` : 'This prototype has no time slider, so the frames its author saved are the record of it.' ),
+      kv( [ [ 'the prototyper', m.statement ], [ 'time parameter', m.time_param ], [ 'best range', asText( m.best_range ) ] ] ), h( 'p', { class: 'small mut', style: 'margin-top:6px' }, 'The judges saw this as still frames.' ) ) : null,
     h( 'div', { class: 'box' }, h( 'h4', null, 'Measured' ),
       kv( [
         [ 'scalar vs perlin2', me.scalar_vs_perlin ? ( /^[\d.]+$/.test( me.scalar_vs_perlin ) ? me.scalar_vs_perlin + 'x perlin2' : me.scalar_vs_perlin ) : null ],
@@ -2145,13 +2225,31 @@ function secondPassTab( it, det )
         [ 'AVX2 cost', me.est_avx2_ns ? me.est_avx2_ns + ( /estimate/i.test( me.est_avx2_ns ) ? '' : ' (estimate)' ) : null ],
         [ 'c0 ratio', me.c0_plain != null ? fmt( me.c0_plain, 2 ) + ' (about 8 = continuous, about 1 = jumps or very steep; this probe never crosses lattice lines at integers, halves and quarters)' : null ],
         [ 'c0 ratio, straddling those lines', me.c0_straddle != null ? fmt( me.c0_straddle, 2 ) + ' (same probe with the samples shifted by -0.0005)' : null ],
-        [ 'largest step', steps ? steps + ' (a slope shrinks with the probe step h, a jump keeps its size)' : null ],
+        [ 'largest step', steps ? steps + ' (a slope shrinks with the probe step h, a jump keeps its size)' : me.c0_step_text ? me.c0_step_text + ' (a slope shrinks with the probe step h, a jump keeps its size)' : null ],
+        [ 'seam scan', scanText( it.scan ) ],
       ] ),
+      it.scan ? h( 'p', { class: 'small mut', style: 'margin-top:6px' }, SCAN_HOW ) : null,
       me.c0_note ? h( 'p', { class: 'small mut', style: 'margin-top:6px' }, 'The prototyper on c0: ', asText( me.c0_note ) ) : null,
-      me.c0ratio && typeof me.c0ratio === 'object' ? asBlock( 'c0 ratio by mode, as the prototyper measured it', me.c0ratio ) : null ),
+      me.c0ratio && typeof me.c0ratio === 'object' ? asBlock( 'c0 ratio by mode, as the prototyper measured it', me.c0ratio ) : null,
+      me.c0_straddle_by_mode ? asBlock( 'c0 ratio by mode, straddling the lattice lines', me.c0_straddle_by_mode ) : null,
+      det.extra_measured && Object.keys( det.extra_measured ).length ? h( 'details', { style: 'margin-top:6px' }, h( 'summary', { class: 'small' }, 'More that the prototyper measured and recorded' ), jsonTree( det.extra_measured ) ) : null ),
     h( 'div', { class: 'cols' },
+      det.changed_from_entry ? textBlock( 'What the prototyper changed from the entry', asText( det.changed_from_entry ) ) : null,
       textBlock( 'Look (the prototyper’s words)', det.look ), textBlock( 'Known artifacts', asText( det.artifacts ) ), asBlock( 'Dimensions', det.dims ), asBlock( 'Range', det.range ),
-      textBlock( 'Proposed node shape', asText( det.node_shape ) ), textBlock( 'Port notes', asText( det.port_notes ) ), textBlock( 'Parameters and other settings', asText( det.params_text ) ) ) );
+      textBlock( 'Proposed node shape', asText( det.node_shape ) ), textBlock( 'Port notes', asText( det.port_notes ) ), textBlock( 'Parameters and other settings', asText( det.params_text ) ), textBlock( 'About this prototype', det.proto_note ), textBlock( 'Views', det.view_used ) ),
+    det.author_read ? h( 'details', { class: 'box' }, h( 'summary', { class: 'small' }, 'What the author looked at, and what they did not' ), h( 'p', { class: 'small', style: 'margin-top:6px' }, det.author_read ) ) : null );
+}
+function originTab( it, det )
+{
+  const o = det.origin || {}, list = ( ids, sep = ', ' ) => ( ids || [] ).map( ( p, i ) => [ i ? sep : '', openLink( p ) ] );
+  const raw = ( o.raw || [] ).map( r => `${ r.lens }${ r.model ? ' (' + r.model.replace( /^claude-/, '' ) + ')' : '' }${ r.name && r.name !== it.name ? ' as ' + r.name : '' }` ).join( '; ' );
+  return h( 'div', { class: 'stack' },
+    h( 'div', { class: 'box' }, h( 'h4', null, 'Which lens proposed it' ),
+      kv( [ [ 'idea agents', raw ], [ 'lens', raw ? null : ( o.lenses || [] ).join( ', ' ) + ( ( o.lenses || [] ).includes( 'crossbreed-panel' ) ? ': a crossbreed the round 1 panel proposed, with no idea agent behind it' : '' ) ], [ 'round 1 judges who proposed the crossbreed', o.panel_lenses && o.panel_lenses.length ? o.panel_lenses.map( l => LENS_LABEL[l] || l ).join( ', ' ) : null ],
+        [ 'crossbreed seed', o.seed_title ? '#' + o.seed_rank + ' ' + o.seed_title : null ], [ 'merged from', ( o.merged_from || [] ).join( ', ' ) ], [ 'origin', o.origin ], [ 'family', o.family ] ] ) ),
+    o.parents && o.parents.length ? h( 'div', { class: 'box' }, h( 'h4', null, 'Parents' ), h( 'p', { class: 'small' }, list( o.parents ) ), h( 'p', { class: 'small mut' }, 'A name with no link is a real node or a discovery, not an idea on this page.' ) ) : null,
+    det.changed_from_entry ? textBlock( 'What the prototyper changed from the entry', asText( det.changed_from_entry ) ) : null,
+    o.smallest_test || det.smallest_test_result ? h( 'div', { class: 'box' }, h( 'h4', null, 'Smallest test' ), kv( [ [ 'asked for', o.smallest_test ], [ 'what came of it', asText( det.smallest_test_result ) ], [ 'confidence when proposed', o.confidence ] ] ) ) : null );
 }
 function coveredTab( it, det )
 {
@@ -2311,6 +2409,7 @@ function ideaStills( it, hq )
   }
   if( hq.relief ) list.push( hqEntry( hq.relief, it.name + ': relief', { view: 'relief' } ) );
   if( hq.vol ) list.push( hqEntry( hq.vol, it.name + ': volume', { view: 'volume' } ) );
+  if( hq.frames ) list.push( hqEntry( hq.frames, it.name + ': the frames its author saved', { view: 'frames' } ) );
   return list;
 }
 function stillCard( e, onopen )
@@ -2352,6 +2451,15 @@ function criticTab( it, det )
 function panelTab( it, det )
 {
   const notes = det.panel || {};
+  if( !isJudged( it ) )
+  {
+    const reason = ( map, title ) => map && Object.keys( map ).length ? h( 'div', { class: 'box warn' }, h( 'h4', null, title ), Object.entries( map ).map( ( [ l, t ] ) => h( 'p', { class: 'small' }, h( 'b', null, LENS_LABEL[l] || l ), ': ', t ) ) ) : null;
+    return h( 'div', { class: 'stack' },
+      scoreBars( it.panel_scores ),
+      h( 'p', { class: 'small mut' }, NEW_PANEL, ' ', PANEL_LIMITS, ' Each judge worked alone from contact sheets and one line of text per idea, and could open at most 15 images at full size in all. ', it.top_lists && it.top_lists.length ? 'On the top-25 list of: ' + it.top_lists.map( l => LENS_LABEL[l] || l ).join( ', ' ) + '.' : 'On no judge’s top-25 list.' ),
+      reason( det.panel_over, 'Called overrated: its author said keeper, and this judge did not agree' ), reason( det.panel_under, 'Called underrated: its author said weak or merged, and this judge wants more of it' ),
+      Object.entries( notes ).map( ( [ l, n ] ) => h( 'div', { class: 'box' }, h( 'div', { class: 'row' }, h( 'b', null, LENS_LABEL[l] || l ), h( 'span', { class: 'num' }, fmt( n.score, 1 ) ) ), h( 'p', { class: 'small' }, n.note ) ) ) );
+  }
   return h( 'div', { class: 'stack' },
     scoreBars( it.panel_scores ),
     h( 'p', { class: 'small mut' }, it.top_lists.length ? 'On the top-25 list of: ' + it.top_lists.map( l => LENS_LABEL[l] || l ).join( ', ' ) : 'On no lens’s top-25 list.', ' The panel judged images and critic prose. Its ns and c0 figures are quoted from tournament.json; the only thing a lens rendered or benched itself was two stock presets by the creative lens.' ),
@@ -2382,6 +2490,112 @@ function researchTab( it, det )
     m.sources && m.sources.length ? h( 'div', { class: 'box srcs' }, h( 'h4', null, 'Sources' ), h( 'ul', null, m.sources.map( s => h( 'li', null, /^https?:/.test( s ) ? h( 'a', { href: s, target: '_blank', rel: 'noopener' }, s ) : s ) ) ) ) : h( 'p', { class: 'small mut' }, 'No sources recorded for this idea in master.json.' ) );
 }
 
+// =================================================================== ROUND 2
+let r2P = null;
+const r2Data = () => r2P || ( r2P = fetch( 'data/round2.json' ).then( r => { if( !r.ok ) throw new Error( 'round2.json ' + r.status ); return r.json(); } ) );
+RENDER.round2 = root => r2Data().then( R => renderRound2( root, R ) );
+const lensName = l => LENS_LABEL[l] || l;
+function renderRound2( root, R )
+{
+  const r2 = D.ideas.filter( i => i.round === 'round2' ).sort( byPanel ), sp = D.ideas.filter( i => i.round === 'second-pass' ), scored = [ ...r2, ...sp ].sort( byPanel );
+  const mean = l => l.reduce( ( a, i ) => a + i.panel_mean, 0 ) / l.length;
+  const lows = scored.filter( keeperUnder5 );
+  const section = ( id, title, ...kids ) => h( 'section', { class: 'stack', id: 'r2-' + id, style: 'scroll-margin-top:110px' }, h( 'h3', null, title ), kids );
+  const chipOf = ( id, extra ) => { const it = ideaById.get( id ); return it ? h( 'button', { type: 'button', class: 'chip', onclick: () => openIdea( id ) }, it.name, hasPanel( it ) ? ' ' + fmt( it.panel_mean, 2 ) : '', extra || '' ) : h( 'span', { class: 'small mut' }, id, extra || '' ); };
+
+  // ranking table: by panel mean, 25 rows until asked for all
+  const judges = R.judges;
+  const rankBox = h( 'div', { class: 'stack' } );
+  const rk = { round: '', all: false };
+  function drawRank()
+  {
+    const list = scored.filter( i => !rk.round || i.round === rk.round ), shown = rk.all ? list : list.slice( 0, 25 );
+    rankBox.textContent = '';
+    const rows = shown.map( it => h( 'tr', { class: 'click' + ( keeperUnder5( it ) ? ' lowrow' : '' ), onclick: () => openIdea( it.id ) },
+      h( 'td', { class: 'num' }, it.panel_rank ), h( 'td', null, img( it.thumb, { class: 'rankthumb', alt: '' } ) ), h( 'td', null, h( 'b', null, it.name ), h( 'div', { class: 'small mut' }, ROUND_LABEL[it.round], ' · ', it.family || it.category || '' ) ),
+      h( 'td', { class: 'num' }, fmt( it.panel_mean, 2 ) ), h( 'td', { class: 'num' }, `${ it.panel_min }–${ it.panel_max }` ), judges.map( j => h( 'td', { class: 'scoreCell' }, it.panel_scores && it.panel_scores[j] !== undefined ? it.panel_scores[j] : '' ) ),
+      h( 'td', { class: 'small' }, it.prototyper_call || '' ), h( 'td', { class: 'small' }, [ it.overrated_by && it.overrated_by.length ? 'over: ' + it.overrated_by.map( lensName ).join( ', ' ) : '', it.underrated_by && it.underrated_by.length ? 'under: ' + it.underrated_by.map( lensName ).join( ', ' ) : '' ].filter( Boolean ).join( '; ' ) ),
+      h( 'td', { class: 'num', title: it.scan ? scanText( it.scan ) : '' }, it.scan ? it.scan.real_jumps : '' ) ) );
+    rankBox.append( h( 'div', { class: 'tbl' }, h( 'table', { class: 'wide' }, h( 'tr', null, h( 'th', { class: 'num' }, '#' ), h( 'th', null, '' ), h( 'th', null, 'idea' ), h( 'th', { class: 'num' }, 'panel mean' ), h( 'th', { class: 'num' }, 'low–high' ), judges.map( j => h( 'th', { class: 'num', title: lensName( j ) }, lensName( j ).split( ' ' ).map( w => w.slice( 0, 4 ) ).join( ' ' ) ) ), h( 'th', null, 'author’s call' ), h( 'th', null, 'a judge says' ), h( 'th', { class: 'num', title: SCAN_HOW }, 'seam crossings' ) ), rows ) ),
+      list.length > 25 ? h( 'button', { class: 'small', style: 'justify-self:start', onclick: () => { rk.all = !rk.all; drawRank(); } }, rk.all ? 'Show the first 25' : `Show all ${ list.length }` ) : null );
+  }
+  const rankSel = h( 'select', { id: 'r2-rank-round', onchange: () => { rk.round = rankSel.value; drawRank(); } }, [ [ '', 'round 2 and second pass, as judged together' ], [ 'round2', 'round 2 only' ], [ 'second-pass', 'second pass only' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
+  drawRank();
+
+  // best look: every judge's picks, most named first
+  const looks = new Map();
+  for( const [ lens, ids ] of Object.entries( R.best_look ) ) for( const id of ids ) { if( !looks.has( id ) ) looks.set( id, [] ); looks.get( id ).push( lens ); }
+  const lookList = [ ...looks.entries() ].filter( ( [ id ] ) => ideaById.has( id ) ).sort( ( a, b ) => b[1].length - a[1].length || byPanel( ideaById.get( a[0] ), ideaById.get( b[0] ) ) );
+  const lookGrid = h( 'div', { class: 'lookgrid' }, lookList.map( ( [ id, who ] ) => { const it = ideaById.get( id ); return h( 'button', { class: 'card', onclick: () => openIdea( id ) }, img( it.thumb, { class: 'th', alt: it.name } ), h( 'div', { class: 'body' }, h( 'div', { class: 'name' }, h( 'span', null, it.name ), h( 'span', { class: 'num', title: panelTitle( it ) }, 'panel ' + fmt( it.panel_mean, 2 ) ) ), h( 'div', { class: 'small mut' }, who.map( lensName ).join( ', ' ) ) ) ); } ) );
+
+  const buildRows = R.build_next.map( g => h( 'div', { class: 'box' },
+    h( 'div', { class: 'row' }, h( 'b', null, g.names[0] ), g.names.length > 1 ? h( 'span', { class: 'small mut' }, 'also called ' + g.names.slice( 1 ).join( ', ' ) ) : null, h( 'span', { class: 'pill kind' }, `${ g.n } of ${ judges.length } judges` ) ),
+    h( 'div', { class: 'idlist', style: 'margin-top:6px' }, g.ids.map( x => chipOf( x.id, g.n > 1 && x.n > 1 ? ' · named ' + x.n + ' times' : '' ) ) ),
+    h( 'details', { style: 'margin-top:6px' }, h( 'summary', { class: 'small' }, 'Why, in each judge’s words' ), g.items.map( it => h( 'p', { class: 'small', style: 'margin-top:4px' }, h( 'b', null, lensName( it.lens ) ), it.node ? ' (' + it.node + ')' : '', ': ', it.why || '' ) ) ) ) );
+  const dupRows = R.duplicates.map( g => h( 'div', { class: 'box' },
+    h( 'div', { class: 'row' }, h( 'span', { class: 'pill kind' }, `${ g.n } of ${ judges.length } judges` ), h( 'div', { class: 'idlist' }, g.ids.slice( 0, 12 ).map( x => chipOf( x.id ) ) ) ),
+    g.items.map( it => h( 'p', { class: 'small', style: 'margin-top:4px' }, h( 'b', null, lensName( it.lens ) ), ': ', it.text ) ) ) );
+  const nav = [ [ 'top', 'Top 25' ], [ 'look', 'Best look' ], [ 'rank', 'Ranking' ], [ 'lows', 'Keepers under 5' ], [ 'missing', 'Still missing' ], [ 'next', 'Build next' ], [ 'dups', 'Duplicates' ], [ 'core', 'Core ideas' ], [ 'dropped', 'Dropped' ] ];
+  put( root,
+    h( 'h2', null, 'Round 2' ),
+    h( 'p', { class: 'lead' }, `A second creative round: eight idea agents wrote ${ R.counts ? R.counts.raw : '' } raw ideas, which merged with the crossbreeds of round 1 into ${ R.counts ? R.counts.merged_entries : '' } entries. ${ r2.length } became scalar prototypes and ${ R.core.length } stay engine ideas for the maintainer. Six judges then scored those prototypes together with the ${ sp.length } of the second pass, which nobody had judged before.` ),
+    h( 'div', { class: 'box warn stack' }, h( 'p', { class: 'small' }, h( 'b', null, 'What these scores are. ' ), NEW_PANEL, ' ', PANEL_LIMITS, ' Each judge worked alone from contact sheets and one line of text per idea, and could open at most 15 images at full size in all.' ),
+      h( 'p', { class: 'small' }, 'Round 1’s score is combined: critic mean and panel mean averaged. These ideas have only the panel mean, so the two are never put on one number here. The panel mean exists for all ', D.counts.panel_scored, ' scored ideas and is what the page sorts by across rounds. This panel was shown round 1 ideas labelled with their panel means so that its scale would match; nobody has checked independently that it does. ', ( () => { const r1 = D.ideas.filter( i => i.round === 'round1' ), top = l => Math.max( ...l.map( i => i.panel_mean ) ); return `The means sit close, ${ fmt( mean( r1 ), 2 ) } for round 1, ${ fmt( mean( sp ), 2 ) } for the second pass and ${ fmt( mean( r2 ), 2 ) } for round 2, but round 1 reaches ${ fmt( top( r1 ), 2 ) } and this sitting stops at ${ fmt( top( scored ), 2 ) }, so the top of any sort across rounds is all round 1. Whether that is the ideas or the sitting, these numbers cannot say.`; } )() ),
+      h( 'p', { class: 'small' }, 'Keeper, promising, weak and merged are only each prototyper’s opinion of their own work. ', lows.length, ' ideas their authors called keepers scored under 5. Nothing on this tab has been built as a real node: every look is a scalar prototype’s and every AVX2 cost an estimate.' ) ),
+    h( 'div', { class: 'tiles' }, tile( r2.length, 'round 2 prototypes' ), tile( sp.length, 'second pass, scored here too' ), tile( fmt( mean( r2 ), 2 ), 'round 2 panel mean' ), tile( fmt( mean( sp ), 2 ), 'second pass panel mean' ), tile( lows.length, 'author’s keepers under 5' ), tile( R.core.length, 'core ideas' ), tile( R.dropped.length, 'crossbreeds dropped' ) ),
+    h( 'div', { class: 'box' }, h( 'h4', null, 'Panel mean by round' ), panelStrip( D.ideas, openIdea ) ),
+    h( 'div', { class: 'r2nav' }, h( 'div', { class: 'chips' }, nav.map( ( [ k, l ] ) => h( 'button', { class: 'chip', onclick: () => { const e = document.getElementById( 'r2-' + k ); if( e ) e.scrollIntoView( { behavior: 'smooth', block: 'start' } ); } }, l ) ) ) ),
+    section( 'top', 'Top 25 by panel mean', h( 'p', { class: 'small mut' }, 'Round 2 and the second pass, as the panel scored them together. The same order is in the Catalog under sort: panel mean.' ), h( 'div', { class: 'grid' }, scored.slice( 0, 25 ).map( ideaCard ) ) ),
+    section( 'look', 'The judges’ best looks', h( 'p', { class: 'small mut' }, 'Each judge named the 10 most striking images, for a front page. Most named first. The names under each image are who picked it. The judges saw volumes at thumbnail size and motion as stills.' ), lookGrid ),
+    section( 'rank', 'The whole ranking', h( 'div', { class: 'filters' }, rankSel ), rankBox ),
+    section( 'lows', 'Keepers their authors loved more than the panel did', h( 'p', { class: 'small mut' }, 'The author’s call beside the panel mean, lowest first. A low score from images is not proof either: some of these exist to give a guarantee or a control that a picture cannot show.' ), h( 'div', { class: 'idlist' }, [ ...lows ].sort( ( a, b ) => a.panel_mean - b.panel_mean ).map( i => chipOf( i.id ) ) ),
+      h( 'details', null, h( 'summary', { class: 'small' }, 'What each judge called overrated or underrated' ), h( 'div', { class: 'stack', style: 'margin-top:6px' }, R.overrated.map( o => h( 'div', { class: 'box' }, h( 'b', null, lensName( o.lens ), ', overrated' ), h( 'ul', { class: 'small' }, o.items.map( x => h( 'li', null, x ) ) ), ( R.underrated.find( u => u.lens === o.lens ) || { items: [] } ).items.length ? [ h( 'b', null, lensName( o.lens ), ', underrated' ), h( 'ul', { class: 'small' }, R.underrated.find( u => u.lens === o.lens ).items.map( x => h( 'li', null, x ) ) ) ] : null ) ) ) ) ),
+    section( 'missing', 'What the judges say is still missing', h( 'p', { class: 'small mut' }, 'Each judge’s closing comment on the whole set, in their own words.' ), h( 'div', { class: 'cols' }, R.comments.map( c => h( 'div', { class: 'box prose' }, h( 'h4', null, lensName( c.lens ) ), md( c.text ) ) ) ) ),
+    section( 'next', 'What the judges would build next', h( 'p', { class: 'small mut' }, `Each judge named 8 to 15 real nodes, grouped so that one node absorbs what belongs together. Proposals that share most of their ideas are joined here, so a group’s name is the commonest one in it, and how many judges named a group is a count this page made, not something they agreed on together. ${ R.build_next.filter( g => g.n > 1 ).length } groups have more than one judge behind them. This is evidence for a plan, not a plan.` ), h( 'div', { class: 'stack' }, buildRows ) ),
+    section( 'dups', 'Duplicates the judges named', h( 'p', { class: 'small mut' }, 'Their own wording, joined where two entries share most of the ideas they name. A name with no score is a real node.' ), h( 'div', { class: 'stack' }, dupRows ) ),
+    section( 'core', 'Four core ideas, for the maintainer', h( 'p', { class: 'small mut' }, 'Engine ideas with no prototype: nothing here was built or measured, and they change the library rather than add a node.' ), h( 'div', { class: 'cols' }, R.core.map( c => h( 'div', { class: 'box' }, h( 'div', { class: 'row' }, h( 'b', null, c.name ), h( 'code', null, c.id ) ), h( 'p', { class: 'small' }, c.one_liner ), kv( [ [ 'what it takes', c.core_note ], [ 'why new', c.why_new ], [ 'risks', c.risks ], [ 'cost note', c.cost_note ], [ 'smallest test', c.smallest_test ], [ 'lens', ( c.lenses || [] ).join( ', ' ) ] ] ), c.sources && c.sources.length ? h( 'div', { class: 'srcs row' }, c.sources.map( s => /^https?:/.test( s ) ? h( 'a', { href: s, target: '_blank', rel: 'noopener' }, s.replace( /^https?:\/\//, '' ).slice( 0, 60 ) ) : h( 'span', { class: 'small mut' }, s ) ) ) : null ) ) ) ),
+    section( 'dropped', 'Four crossbreeds dropped, with reasons', h( 'p', { class: 'small mut' }, 'The merge found these already exist, so they got no prototype.' ), h( 'div', { class: 'cols' }, R.dropped.map( d => h( 'div', { class: 'box' }, h( 'b', null, d.name ), kv( [ [ 'from', d.from ], [ 'duplicate of', d.duplicate_of ], [ 'why', d.why ], [ 'a control worth keeping', d.control_worth_keeping ] ] ) ) ) ) ) );
+}
+// The next real node plan, once it exists. Nothing in it is built. Field names follow ideas/round2/node_plan2.json; what is not there is left out.
+function plan2Box()
+{
+  const box = h( 'div', { class: 'stack', id: 'plan2' } );
+  r2Data().then( R =>
+  {
+    const P = R.plan2;
+    if( !P ) { box.append( h( 'p', { class: 'small mut' }, 'The plan for the next real nodes, from round 2, is not written yet. It will appear here, labelled as a plan with nothing built.' ) ); return; }
+    const c = P.counts || {}, text = v => v === null || v === undefined ? '' : typeof v === 'string' ? v : asText( v );
+    const ids = ( list, sep = ', ' ) => ( list || [] ).map( ( a, i ) => { const id = typeof a === 'string' ? a : a.id; return [ i ? sep : '', openLink( id ) ]; } );
+    const bullets = v => Array.isArray( v ) ? h( 'ul', { class: 'small' }, v.map( x => h( 'li', null, text( x ) ) ) ) : h( 'p', { class: 'small' }, text( v ) );
+    const rows = ( P.nodes || [] ).map( n =>
+    {
+      const tr = h( 'tr', { class: 'click' }, h( 'td', { class: 'num' }, n.piece ), h( 'td', null, h( 'b', null, n.class ), h( 'div', { class: 'small mut' }, n.kind ) ), h( 'td', { class: 'small' }, n.group || '' ), h( 'td', { class: 'num' }, n.batch ), h( 'td', { class: 'num' }, n.difficulty ), h( 'td', { class: 'num', title: 'best panel mean among the ideas it absorbs' }, fmt( n.best_panel_mean, 2 ) ), h( 'td', { class: 'small' }, ids( n.absorbs ) ), h( 'td', { class: 'small', title: text( n.expected_cost ) }, text( n.expected_cost ).slice( 0, 100 ) + ( text( n.expected_cost ).length > 100 ? '…' : '' ) ) );
+      const exp = h( 'tr', { class: 'exp', hidden: true }, h( 'td', { colspan: 8 }, h( 'div', { class: 'stack' },
+        h( 'p', { class: 'small' }, text( n.why ) ),
+        kv( [ [ 'extends', n.extends ], [ 'files', ( n.files || [] ).join( ', ' ) ], [ 'kernels', ( n.kernels || [] ).join( ', ' ) ], [ 'mixins', ( n.mixins || [] ).join( ', ' ) ], [ 'why this difficulty', n.why_difficulty ], [ 'cost, an estimate', text( n.expected_cost ) ], [ '2D, 3D, 4D', text( n.dims ) ], [ 'range', text( n.range ) ], [ 'continuity', text( n.continuity ) ] ] ),
+        n.members && n.members.length ? membersTable( n.members ) : null,
+        n.algorithm ? h( 'details', null, h( 'summary', { class: 'small' }, 'Algorithm decisions' ), bullets( n.algorithm ) ) : null, n.must_carry ? h( 'details', null, h( 'summary', { class: 'small' }, 'What must carry over from prototyping' ), bullets( n.must_carry ) ) : null,
+        n.risks ? h( 'details', null, h( 'summary', { class: 'small' }, 'Risks' ), bullets( n.risks ) ) : null, n.test ? h( 'details', null, h( 'summary', { class: 'small' }, 'Tests' ), bullets( n.test ) ) : null,
+        n.presets && n.presets.length ? h( 'details', null, h( 'summary', { class: 'small' }, `Presets to write (${ n.presets.length })` ), h( 'ul', { class: 'small' }, n.presets.map( p => h( 'li', null, h( 'b', null, p.name ), p.look ? ': ' + p.look : '', ' ', h( 'code', null, p.dsl || '' ) ) ) ) ) : null ) ) );
+      tr.onclick = () => { exp.hidden = !exp.hidden; };
+      return [ tr, exp ];
+    } );
+    box.append( h( 'details', { class: 'box warn', open: true }, h( 'summary', null, h( 'b', null, 'The next plan, from round 2: a plan, nothing built' ) ),
+      h( 'div', { class: 'stack', style: 'margin-top:6px' },
+        h( 'p', { class: 'small' }, P.honesty || 'Nothing in this plan has been built, so every look is the prototype’s look and every cost an estimate.' ),
+        h( 'div', { class: 'tiles' }, tile( c.pieces ?? '–', 'pieces of work' ), tile( c.new_classes ?? '–', 'new classes' ), tile( c.member_pieces ?? '–', 'members on existing nodes' ), tile( c.ideas_in_pieces ?? '–', 'ideas in them' ), tile( c.quick_members ?? '–', 'quick members' ), tile( c.reserve_entries ?? '–', 'in reserve' ), tile( c.graph_recipes ?? '–', 'graph recipes' ), tile( c.ideas_left_out ?? '–', 'ideas left out' ) ),
+        h( 'p', { class: 'small mut' }, 'Click a row for members, algorithm decisions, risks and tests. Every cost is an estimate.' ),
+        h( 'div', { class: 'tbl' }, h( 'table', { class: 'wide' }, h( 'tr', null, [ '#', 'piece', 'group', 'batch', 'diff', 'best panel', 'absorbs', 'expected cost' ].map( ( t, i ) => h( 'th', { class: [ 0, 3, 4, 5 ].includes( i ) ? 'num' : '' }, t ) ) ), rows ) ),
+        P.questions_for_maintainer ? h( 'details', null, h( 'summary', null, `Questions for the maintainer (${ P.questions_for_maintainer.length })` ), h( 'div', { class: 'stack', style: 'margin-top:6px' }, P.questions_for_maintainer.map( q => h( 'div', { class: 'box' }, h( 'b', null, q.id + '. ' + q.title ), q.type ? h( 'span', { class: 'small mut' }, ' · ' + q.type ) : null, kv( Object.entries( q ).filter( ( [ k ] ) => ![ 'id', 'title', 'type' ].includes( k ) ).map( ( [ k, v ] ) => [ k.replace( /_/g, ' ' ), text( v ) ] ) ) ) ) ) ) : null,
+        P.quick_members ? h( 'details', null, h( 'summary', null, `Quick members (${ P.quick_members.length })` ), h( 'div', { class: 'tbl' }, h( 'table', { class: 'wide' }, h( 'tr', null, [ 'on', 'absorbs', 'members', 'cost', 'why' ].map( t => h( 'th', null, t ) ) ), P.quick_members.map( q => h( 'tr', null, h( 'td', null, h( 'b', null, q.on ) ), h( 'td', { class: 'small' }, ids( q.absorbs ) ), h( 'td', { class: 'small' }, text( q.members ) ), h( 'td', { class: 'small' }, text( q.cost ) ), h( 'td', { class: 'small' }, text( q.why ) ) ) ) ) ) ) : null,
+        P.reserve ? h( 'details', null, h( 'summary', null, `Reserve, next in line (${ P.reserve.length })` ), h( 'div', { class: 'tbl' }, h( 'table', { class: 'wide' }, h( 'tr', null, [ '#', 'node', 'ideas', 'best panel', 'why not now' ].map( ( t, i ) => h( 'th', { class: i === 0 || i === 3 ? 'num' : '' }, t ) ) ), P.reserve.map( r => h( 'tr', null, h( 'td', { class: 'num' }, r.order ), h( 'td', null, h( 'b', null, r.class ) ), h( 'td', { class: 'small' }, ids( r.ids ) ), h( 'td', { class: 'num' }, fmt( r.best_panel_mean, 2 ) ), h( 'td', { class: 'small' }, r.why ) ) ) ) ) ) : null,
+        P.graph_recipes ? h( 'details', null, h( 'summary', null, `Graph recipes: a preset of existing nodes is enough (${ P.graph_recipes.length })` ), h( 'ul', { class: 'small' }, P.graph_recipes.map( g => h( 'li', null, openLink( g.id ), ': ', g.note || '', ' ', h( 'code', null, g.dsl || '' ) ) ) ) ) : null,
+        P.left_out ? h( 'details', null, h( 'summary', null, `Left out, with reasons (${ P.left_out.length } groups)` ), h( 'ul', { class: 'small' }, P.left_out.map( g => h( 'li', null, h( 'b', null, g.group ), ' (', ids( g.ids ), '): ', g.reason ) ) ) ) : null,
+        P.gaps ? h( 'details', null, h( 'summary', null, `Gaps this plan does not close (${ P.gaps.length })` ), h( 'ul', { class: 'small' }, P.gaps.map( g => h( 'li', null, h( 'b', null, g.gap ), ' (' + ( g.named_by || '' ) + '): ', g.status || '' ) ) ) ) : null ) ) );
+  } ).catch( e => { box.append( h( 'p', { class: 'small mut' }, 'The next plan failed to load: ' + e.message ) ); } );
+  return box;
+}
+
 // =================================================================== COMPARE
 const Compare = {
   sel: [], seed: 1337, window: 8, mode: '2d', shade: 'terrain', question: '',
@@ -2400,7 +2614,7 @@ const Compare = {
     for( const id of this.sel )
     {
       const it = ideaById.get( id );
-      const cell = h( 'div', { class: 'box', style: 'padding:8px' }, h( 'div', { class: 'row', style: 'margin-bottom:6px' }, h( 'b', null, it.name ), callPill( it.call ), isJudged( it ) ? h( 'span', { class: 'num mut' }, fmt( it.combined ) ) : protoCallPill( it ), h( 'button', { class: 'small', style: 'margin-left:auto', onclick: () => openIdea( id ) }, 'detail' ) ) );
+      const cell = h( 'div', { class: 'box', style: 'padding:8px' }, h( 'div', { class: 'row', style: 'margin-bottom:6px' }, h( 'b', null, it.name ), callPill( it.call ), panelPill( it ), isJudged( it ) ? h( 'span', { class: 'num mut', title: 'combined score, round 1 only' }, 'combined ' + fmt( it.combined ) ) : protoCallPill( it ), h( 'button', { class: 'small', style: 'margin-left:auto', onclick: () => openIdea( id ) }, 'detail' ) ) );
       this.host.append( cell );
       if( it.proto_ok ) previews.compare.push( new Preview( cell, { kind: 'proto', idea: id, compact: true, seed: this.seed, window: this.window, mode: this.mode, shade: this.shade, res: Prefs.get( 'cmpRes' ), aspect: Prefs.get( 'cmpAspect' ) } ) );
       else cell.append( h( 'p', { class: 'small mut' }, 'no runnable prototype' ) );
@@ -2426,7 +2640,7 @@ RENDER.compare = root =>
   Compare.host = h( 'div', { class: 'grid' } );
   const qSel = h( 'select', { onchange: () => pickQuestion( qSel.value ) }, h( 'option', { value: '' }, 'pre-built comparison…' ),
     D.families.map( f => h( 'option', { value: f.family }, ( f.question ? f.question + ' ' : '' ) + '[' + f.family + ', ' + f.ideas.length + ' ideas]' ) ) );
-  const addSel = h( 'select', { onchange: () => { if( addSel.value ) { Compare.add( addSel.value ); addSel.value = ''; } } }, h( 'option', { value: '' }, 'add an idea…' ), D.ideas.filter( i => i.proto_ok ).map( i => h( 'option', { value: i.id }, ideaLabel( i ) ) ) );
+  const addSel = h( 'select', { onchange: () => { if( addSel.value ) { Compare.add( addSel.value ); addSel.value = ''; } } }, h( 'option', { value: '' }, 'add an idea…' ), ideaOptions( D.ideas.filter( i => i.proto_ok ) ) );
   const seedIn = h( 'input', { type: 'number', value: Compare.seed, style: 'width:88px', id: 'cmp-seed', oninput: () => Compare.shared( { seed: +seedIn.value | 0 } ) } );
   const winIn = h( 'input', { type: 'number', value: Compare.window, step: 1, min: 1, style: 'width:70px', id: 'cmp-window', oninput: () => Compare.shared( { window: +winIn.value || 8 } ) } );
   const modeSel = h( 'select', { onchange: () => Compare.shared( { mode: modeSel.value } ) }, MODES.proto.map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
@@ -2461,7 +2675,7 @@ RENDER.compare = root =>
   }
   put( root, 
     h( 'h2', null, 'Compare' ),
-    h( 'p', { class: 'lead' }, 'Up to four prototypes side by side with one seed, window and output size. The pre-built comparisons are the family questions from queue.md with the critic’s answer; families without a queue question are listed by name. Prototypes that were not judged can be added too; they have no family.' ),
+    h( 'p', { class: 'lead' }, 'Up to four prototypes side by side with one seed, window and output size. The pre-built comparisons are the family questions from queue.md with the critic’s answer; families without a queue question are listed by name. Prototypes of the second pass and round 2 can be added too; those have a panel mean and no critic, so compare across rounds by the panel mean.' ),
     h( 'div', { class: 'filters' }, qSel, addSel, h( 'label', null, 'seed ', seedIn ), h( 'label', null, 'window ', winIn ), modeSel, shadeSel, h( 'label', null, 'output ', resSel ), h( 'label', null, 'shape ', aspectSel ), h( 'label', null, 'cells ', cellSel ), h( 'label', null, 'workers ', workerSel ), h( 'button', { class: 'small', onclick: () => previews.compare.forEach( p => { if( p.busy ) p.cancelRender(); } ) }, 'cancel all' ) ),
     Compare.selBox, Compare.host, answer );
   if( !Compare.sel.length ) { qSel.value = D.families.find( f => f.question ) ? D.families.find( f => f.question ).family : D.families[0].family; pickQuestion( qSel.value ); }
@@ -2494,7 +2708,7 @@ function renderDiscoveries( root, M )
         d.sheet ? h( 'button', { type: 'button', onclick: () => lightbox( [ { ref: d.sheet, label: d.name + ': the analysis sheet the lab kept', file: d.file } ], 0 ) }, 'Analysis sheet' ) : null ) : null,
       text: [ d.how ? 'How: ' + d.how : '', d.why ? 'Why it matters: ' + d.why : '', d.idea ? 'From the idea: ' + d.idea : '', d.proto ? 'Prototype: ' + d.proto : '', 'Source: ' + d.source, d.render ? `Rendered again from ${ d.render.by }${ d.render.set ? ' with ' + d.render.set : '' }; shrunk to the size of the image the lab kept it correlates ${ d.render.r.map( x => x.toFixed( 2 ) ).join( ' and ' ) } with it${ d.render.r.length > 1 ? ' (gray, hillshade)' : '' }.` : '' ].filter( Boolean ).join( '\n' ), file: d.file } ) );
     l.forEach( ( d, i ) => grid.append( h( 'div', { class: 'card', role: 'button', tabindex: 0, 'aria-label': d.name, onclick: () => lightbox( lb, i ), onkeydown: e => { if( e.key === 'Enter' && e.target === e.currentTarget ) lightbox( lb, i ); } }, img( d.thumb, { class: 'th', alt: d.name } ),
-      h( 'div', { class: 'body' }, h( 'div', { class: 'name' }, h( 'span', null, d.name ) ), h( 'div', { class: 'one' }, d.how || ( d.missing ? 'image file not on disk' : 'no text recorded' ) ), h( 'div', { class: 'meta' }, famChip( d.family ), d.family === 'second pass' ? ( d.idea && ideaById.has( d.idea ) ? h( 'button', { type: 'button', class: 'chip', onclick: e => { e.stopPropagation(); openIdea( d.idea ); } }, d.idea ) : null ) : d.source !== 'tournament.json' ? h( 'span', { class: 'small mut' }, 'file only' ) : null ), treeInText( d ) ? h( 'div', null, h( 'button', { type: 'button', class: 'toed', onclick: e => { e.stopPropagation(); openDsl( d.name, treeInText( d ) ); } }, 'Open in node editor' ) ) : null ) ) ) );
+      h( 'div', { class: 'body' }, h( 'div', { class: 'name' }, h( 'span', null, d.name ) ), h( 'div', { class: 'one' }, d.how || ( d.missing ? 'image file not on disk' : 'no text recorded' ) ), h( 'div', { class: 'meta' }, famChip( d.family ), d.family === 'second pass' || d.family === 'round 2' ? ( d.idea && ideaById.has( d.idea ) ? h( 'button', { type: 'button', class: 'chip', onclick: e => { e.stopPropagation(); openIdea( d.idea ); } }, d.idea ) : null ) : d.source !== 'tournament.json' ? h( 'span', { class: 'small mut' }, 'file only' ) : null ), treeInText( d ) ? h( 'div', null, h( 'button', { type: 'button', class: 'toed', onclick: e => { e.stopPropagation(); openDsl( d.name, treeInText( d ) ); } }, 'Open in node editor' ) ) : null ) ) ) );
   }
   const famSel = h( 'select', { onchange: () => { fam = famSel.value; apply(); } }, h( 'option', { value: '' }, 'all families' ), fams.map( f => h( 'option', { value: f }, f ) ) );
   const search = h( 'input', { type: 'search', id: 'disc-search', placeholder: 'search discoveries', oninput: () => { q = search.value.toLowerCase(); apply(); } } );
@@ -2513,7 +2727,7 @@ function renderDiscoveries( root, M )
     openRow( linked ) ); };
   put( root, 
     h( 'h2', null, 'Discoveries and round 2 seeds' ),
-    h( 'p', { class: 'lead' }, `${ M.discoveries.filter( d => d.source === 'tournament.json' ).length } accidents and mutations were written up by the prototypers and critics in the tournament, ${ M.discoveries.filter( d => d.family === 'second pass' ).length } more came from the later prototypes that were not judged, and ${ M.discoveries.filter( d => d.source !== 'tournament.json' && d.family !== 'second pass' ).length } more image files sit beside them without an entry. Each card says how it arose where that was recorded.${ M.disc_stats ? ` ${ M.disc_stats.rerendered } images were rendered again at high resolution, each checked by correlation against the image the lab kept; the other ${ M.disc_stats.kept } are comparisons, or could not be reproduced exactly, and stay at their source size.` : '' }` ),
+    h( 'p', { class: 'lead' }, `${ M.discoveries.filter( d => d.source === 'tournament.json' ).length } accidents and mutations were written up by the prototypers and critics in the tournament, ${ M.discoveries.filter( d => d.family === 'second pass' ).length } more came from the second pass, ${ M.discoveries.filter( d => d.family === 'round 2' ).length } from round 2, and ${ M.discoveries.filter( d => d.source !== 'tournament.json' && d.family !== 'second pass' && d.family !== 'round 2' ).length } more image files sit beside them without an entry. Each card says how it arose where that was recorded.${ M.disc_stats ? ` ${ M.disc_stats.rerendered } images were rendered again at high resolution, each checked by correlation against the image the lab kept; the other ${ M.disc_stats.kept } are comparisons, or could not be reproduced exactly, and stay at their source size.` : '' }` ),
     h( 'div', { class: 'filters' }, search, famSel, count ),
     grid,
     h( 'h2', null, 'Round 2 crossbreeds' ), md( r2.intro.replace( /^# Round 2 seeds\s*/, '' ) ), crossTable,
@@ -2555,6 +2769,7 @@ function renderPlan( root, M )
     Object.keys( pool.new_for_30_nodes || {} ).map( k => h( 'tr', null, h( 'td', null, k ), h( 'td', { class: 'num' }, pool.now_measured_on_base_dll[k] ), h( 'td', { class: 'num' }, pool.new_for_30_nodes[k] ), h( 'td', { class: 'num', style: pool.after_30_nodes[k] > pool.limit_per_pool ? 'color:var(--bad)' : '' }, pool.after_30_nodes[k] ), h( 'td', { class: 'num', style: pool.after_30_nodes_plus_tier3_build[k] > pool.limit_per_pool ? 'color:var(--bad)' : '' }, pool.after_30_nodes_plus_tier3_build[k] ), h( 'td', { class: 'num' }, pool.limit_per_pool ) ) ) ) ) : null;
   put( root, 
     h( 'h2', null, 'Real nodes and the plan' ),
+    plan2Box(),
     h( 'div', { class: 'box warn stack' }, h( 'p', null, P.honesty ), P.honesty_note ? h( 'p', null, P.honesty_note ) : null ),
     h( 'div', { class: 'tiles' }, tile( c.planned_nodes ?? '–', 'nodes planned' ), tile( landedReal().length, 'nodes landed' ), tile( D.plan.kernels_merged.length, 'kernels merged' ), tile( c.ideas_in_nodes ?? '–', 'ideas absorbed' ), tile( c.kernels ?? '–', 'shared kernels' ), tile( c.batches ?? '–', 'batches' ), tile( c.tier3_build ?? '–', 'tier 3 to build' ), tile( c.graph_recipes ?? '–', 'graph recipes' ), tile( c.dropped ?? '–', 'dropped' ) ),
     h( 'h3', null, 'Decisions taken at the plan default' ), h( 'p', { class: 'small mut' }, 'The plan took its default on each of these. Each is still a question to weigh.' ), decisions,
@@ -2642,20 +2857,20 @@ function benchChart( real )
 RENDER.trail = root =>
 {
   const host = h( 'div' ), count = h( 'span', { class: 'small mut' } );
-  put( root,  h( 'h2', null, 'Research trail' ), h( 'p', { class: 'lead' }, 'Every merged idea from the research round, with its sources, lenses and what happened to it, including the ones never queued. A thumbnail or a status button opens the idea. Source links open in a new tab.' ), host );
+  put( root,  h( 'h2', null, 'Research trail' ), h( 'p', { class: 'lead' }, 'Every merged idea from the first research round and from round 2, with its sources, lenses and what happened to it, including the ones never queued. A thumbnail or a status button opens the idea. Source links open in a new tab.' ), host );
   host.append( h( 'p', { class: 'mut' }, 'loading trail…' ) );
   fetch( 'data/trail.json' ).then( r => r.json() ).then( t =>
   {
     T = t;
     const cats = [ ...new Set( t.ideas.map( i => i.category ).filter( Boolean ) ) ].sort(), origins = [ ...new Set( t.ideas.map( i => i.origin ).filter( Boolean ) ) ].sort();
-    const st = { q: '', cat: '', origin: '', only: '' };
+    const st = { q: '', cat: '', origin: '', only: '', round: '' };
     const list = h( 'div' );
     function apply()
     {
       const q = st.q.toLowerCase();
       const l = t.ideas.filter( i => ( !st.cat || i.category === st.cat ) && ( !st.origin || i.origin === st.origin )
         && ( st.only !== 'queued' || i.queue ) && ( st.only !== 'judged' || i.judged ) && ( st.only !== 'unqueued' || !i.queue ) && ( st.only !== 'sources' || ( i.sources && i.sources.length ) )
-        && ( st.only !== 'second-pass' && st.only !== 'covered' || ( ideaById.get( i.id ) || {} ).kind === st.only )
+        && ( st.only !== 'second-pass' && st.only !== 'covered' || ( ideaById.get( i.id ) || {} ).kind === st.only ) && ( !st.round || i.round === st.round )
         && ( !q || JSON.stringify( i ).toLowerCase().includes( q ) ) );
       count.textContent = `${ l.length } of ${ t.ideas.length }`;
       list.textContent = '';
@@ -2666,12 +2881,12 @@ RENDER.trail = root =>
         const row = h( 'div', { class: 'trow' + ( it && it.thumb ? ' withth' : '' ) },
           it && it.thumb ? h( 'button', { type: 'button', class: 'tth', 'aria-label': 'open ' + i.name, onclick: () => openIdea( i.id ) }, img( it.thumb, { alt: '' } ) ) : null,
           h( 'div', { class: 'tbody' },
-          h( 'div', { class: 't' }, h( 'b', null, i.name ), h( 'code', null, i.id ), famChip( i.category ), h( 'span', { class: 'small mut' }, i.origin ),
-            i.queue ? h( 'span', { class: 'pill kind' }, 'queued tier ' + i.queue.tier ) : h( 'span', { class: 'small mut' }, 'not queued' ),
-            i.judged ? h( 'button', { class: 'chip', onclick: () => openIdea( i.id ) }, `judged #${ i.judged.rank } · ${ fmt( i.judged.combined ) } · ${ i.judged.call }` ) : it && it.kind === 'covered' ? h( 'button', { class: 'chip', onclick: () => openIdea( i.id ) }, 'covered by ' + it.covered_by ) : it ? h( 'button', { class: 'chip', onclick: () => openIdea( i.id ) }, 'prototype only, not judged · prototyper’s call: ' + it.prototyper_call + ( it.merged_into ? ' into ' + it.merged_into : '' ) ) : null ),
+          h( 'div', { class: 't' }, h( 'b', null, i.name ), h( 'code', null, i.id ), i.round === 'round2' ? h( 'span', { class: 'pill round' }, 'round 2' ) : null, famChip( i.category ), h( 'span', { class: 'small mut' }, i.origin ),
+            i.round === 'round2' ? ( i.track === 'core' ? h( 'span', { class: 'pill kind' }, 'core idea, no prototype' ) : null ) : i.queue ? h( 'span', { class: 'pill kind' }, 'queued tier ' + i.queue.tier ) : h( 'span', { class: 'small mut' }, 'not queued' ),
+            i.judged ? h( 'button', { class: 'chip', onclick: () => openIdea( i.id ) }, `judged #${ i.judged.rank } · ${ fmt( i.judged.combined ) } · ${ i.judged.call }` ) : it && it.kind === 'covered' ? h( 'button', { class: 'chip', onclick: () => openIdea( i.id ) }, 'covered by ' + it.covered_by ) : it ? h( 'button', { class: 'chip', onclick: () => openIdea( i.id ) }, ( hasPanel( it ) ? 'panel ' + fmt( it.panel_mean, 2 ) + ' · ' : '' ) + 'prototyper’s call: ' + it.prototyper_call + ( it.merged_into ? ' into ' + it.merged_into : '' ) ) : null ),
           h( 'p', { class: 'small' }, i.one_liner ),
           i.sources && i.sources.length ? h( 'div', { class: 'srcs row' }, i.sources.map( s => /^https?:/.test( s ) ? h( 'a', { href: s, target: '_blank', rel: 'noopener' }, s.replace( /^https?:\/\//, '' ).slice( 0, 60 ) ) : h( 'span', { class: 'small mut' }, s ) ) ) : null,
-          h( 'button', { class: 'small', style: 'justify-self:start', onclick: () => { det.hidden = !det.hidden; if( !det.childElementCount ) det.append( kv( [ [ 'lenses', ( i.lenses || [] ).join( ', ' ) ], [ 'models', ( i.models || [] ).join( ', ' ) ], [ 'merged from', ( i.merged_from || [] ).join( ', ' ) ], [ 'related', ( i.related || [] ).join( ', ' ) ], [ 'queue reason', i.queue && i.queue.reason ], [ 'disposition', i.disp ? `${ i.disp.where } → ${ i.disp.target || '' } ${ i.disp.how || '' }` : null ] ] ),
+          h( 'button', { class: 'small', style: 'justify-self:start', onclick: () => { det.hidden = !det.hidden; if( !det.childElementCount ) det.append( kv( [ [ 'lenses', ( i.lenses || [] ).join( ', ' ) ], [ 'models', ( i.models || [] ).join( ', ' ) ], [ 'merged from', ( i.merged_from || [] ).join( ', ' ) ], [ 'parents', ( i.parents || [] ).join( ', ' ) ], [ 'family', i.family ], [ 'related', ( i.related || [] ).join( ', ' ) ], [ 'core note', i.core_note ], [ 'queue reason', i.queue && i.queue.reason ], [ 'disposition', i.disp ? `${ i.disp.where } → ${ i.disp.target || '' } ${ i.disp.how || '' }` : null ] ] ),
             h( 'div', { class: 'cols' }, textBlock( 'Look', i.look ), textBlock( 'Why new', i.why_new ), textBlock( 'Algorithm', i.algorithm ), textBlock( 'SIMD plan', i.simd_plan ), textBlock( 'Continuity', i.continuity ), textBlock( 'Params', i.params ), textBlock( 'Risks', i.risks ), textBlock( 'Cost note', i.cost_note ) ) ); } }, 'full entry' ),
           det ) );
         list.append( row );
@@ -2681,10 +2896,11 @@ RENDER.trail = root =>
     const search = h( 'input', { type: 'search', id: 'trail-search', placeholder: 'search all text', oninput: () => { st.q = search.value; apply(); } } );
     const catSel = h( 'select', { onchange: () => { st.cat = catSel.value; apply(); } }, h( 'option', { value: '' }, 'all categories' ), cats.map( c => h( 'option', { value: c }, c ) ) );
     const orSel = h( 'select', { onchange: () => { st.origin = orSel.value; apply(); } }, h( 'option', { value: '' }, 'all origins' ), origins.map( c => h( 'option', { value: c }, c ) ) );
-    const onlySel = h( 'select', { onchange: () => { st.only = onlySel.value; apply(); } }, [ [ '', 'everything' ], [ 'queued', 'queued only' ], [ 'unqueued', 'never queued' ], [ 'judged', 'judged in the tournament' ], [ 'second-pass', 'prototype only, not judged' ], [ 'covered', 'covered by a real node' ], [ 'sources', 'with sources' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
+    const roundSel = h( 'select', { id: 'trail-round', onchange: () => { st.round = roundSel.value; apply(); } }, [ [ '', 'all rounds' ], [ 'round2', 'round 2' ], [ 'second-pass', 'second pass' ], [ 'round1', 'round 1' ], [ 'covered', 'covered by a real node' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
+    const onlySel = h( 'select', { onchange: () => { st.only = onlySel.value; apply(); } }, [ [ '', 'everything' ], [ 'queued', 'queued only' ], [ 'unqueued', 'never queued' ], [ 'judged', 'judged in the tournament' ], [ 'second-pass', 'second pass' ], [ 'covered', 'covered by a real node' ], [ 'sources', 'with sources' ] ].map( ( [ v, l ] ) => h( 'option', { value: v }, l ) ) );
     host.textContent = '';
-    host.append( h( 'div', { class: 'tiles' }, tile( t.ideas.length, 'merged ideas' ), tile( t.ideas.filter( i => i.queue ).length, 'queued' ), tile( t.ideas.filter( i => i.judged ).length, 'judged' ), tile( D.counts.second_pass, 'prototype only, not judged' ), tile( D.counts.covered, 'covered by a real node' ), tile( t.sources_n, 'with sources' ) ),
-      h( 'div', { class: 'filters' }, search, catSel, orSel, onlySel, count ), list );
+    host.append( h( 'div', { class: 'tiles' }, tile( t.ideas.length, 'merged ideas' ), tile( t.ideas.filter( i => i.queue ).length, 'queued' ), tile( t.ideas.filter( i => i.judged ).length, 'judged with a critic' ), tile( D.counts.second_pass, 'second pass, panel only' ), tile( D.counts.round2, 'round 2, panel only' ), tile( D.counts.round2_core, 'round 2 core ideas' ), tile( D.counts.covered, 'covered by a real node' ), tile( t.sources_n, 'with sources' ) ),
+      h( 'div', { class: 'filters' }, search, roundSel, catSel, orSel, onlySel, count ), list );
     apply();
   } ).catch( e => { host.textContent = 'trail failed to load: ' + e.message; } );
 };
@@ -2699,20 +2915,20 @@ function renderNotes( root, M )
   put( root, 
     h( 'h2', null, 'Honest notes' ),
     h( 'p', { class: 'lead' }, 'Process numbers, what was not verified, what the panel said is missing, and findings made along the way.' ),
-    N.second_pass ? [ h( 'h3', null, 'Ideas with images, and the ones nobody judged' ),
-      h( 'div', { class: 'tiles' }, tile( p.with_images, 'ideas with images' ), tile( p.judged_ideas, 'prototyped and judged' ), tile( p.second_pass, 'prototyped, not judged' ), tile( p.covered, 'shown through a real node' ) ),
+    N.second_pass ? [ h( 'h3', null, 'Ideas with images, and the ones with no critic' ),
+      h( 'div', { class: 'tiles' }, tile( p.with_images, 'ideas with images' ), tile( p.judged_ideas, 'critic and panel' ), tile( p.second_pass, 'second pass, panel only' ), tile( p.round2, 'round 2, panel only' ), tile( p.covered, 'shown through a real node' ), tile( p.panel_scored, 'with a panel mean' ) ),
       h( 'div', { class: 'stack' }, N.second_pass.text.map( x => h( 'p', { class: 'small', style: 'max-width:80ch' }, x ) ) ),
-      h( 'details', null, h( 'summary', null, `Ideas not judged whose straddling c0 ratio is under 3 (${ Object.keys( N.second_pass.continuity ).length })` ),
+      h( 'details', null, h( 'summary', null, `Ideas with no critic whose straddling c0 ratio is under 3 (${ Object.keys( N.second_pass.continuity ).length })` ),
         h( 'p', { class: 'small mut' }, 'Open one for its text: most are steep or jump by design, and a few have a real step.' ),
         h( 'p', { class: 'small' }, Object.entries( N.second_pass.continuity ).map( ( [ id, v ], i ) => [ i ? ', ' : '', h( 'a', { href: '#', onclick: e => { e.preventDefault(); openIdea( id ); } }, id ), ` ${ fmt( v.plain, 2 ) } to ${ fmt( v.straddle, 2 ) }` ] ) ) ) ] : null,
     h( 'h3', null, 'Process numbers' ),
-    h( 'div', { class: 'tiles' }, p.raw_ideas ? tile( p.raw_ideas, 'raw ideas' ) : null, tile( p.merged_ideas, 'merged (master.json)' ), tile( p.queued, 'queued (queue.json)' ), tile( p.families, 'families' ), tile( p.judged_ideas, 'judged (ranked.json)' ), p.second_pass ? tile( p.second_pass, 'prototyped, not judged' ) : null, tile( p.panel_lenses, 'panel lenses' ), tile( p.discovery_entries, 'discovery entries' ), tile( p.discovery_images, 'discovery images on disk' ), tile( p.proto_count, 'prototypes in protos.wasm' ), tile( p.images_packed, 'images packed into this page' ) ),
+    h( 'div', { class: 'tiles' }, p.raw_ideas ? tile( p.raw_ideas, 'raw ideas' ) : null, tile( p.merged_ideas, 'merged (master.json)' ), tile( p.queued, 'queued (queue.json)' ), tile( p.families, 'families' ), tile( p.judged_ideas, 'judged (ranked.json)' ), p.second_pass ? tile( p.second_pass, 'second pass, panel only' ) : null, p.round2 ? tile( p.round2, 'round 2, panel only' ) : null, tile( p.panel_lenses, 'panel lenses' ), tile( p.discovery_entries, 'discovery entries' ), tile( p.discovery_images, 'discovery images on disk' ), tile( p.proto_count, 'prototypes in protos.wasm' ), tile( p.images_packed, 'images packed into this page' ) ),
     h( 'p', { class: 'small mut' }, 'Calls: ', JSON.stringify( p.calls ), '. Judged status: ', JSON.stringify( p.judged ), '. Prototype status in the WASM index: ', JSON.stringify( p.proto_status ), '.' ),
     h( 'h3', null, 'Not verified' ),
     h( 'div', { class: 'stack' }, N.unverified.map( u => h( 'div', { class: 'box warn' }, h( 'p', { class: 'small' }, u.text ), u.source ? h( 'p', { class: 'small mut mono' }, u.source ) : null ) ) ),
     h( 'h3', null, 'Side findings' ),
     h( 'div', { class: 'stack' }, [ ...side.entries() ].map( ( [ title, items ] ) => h( 'div', { class: 'box' }, h( 'h4', null, title ), items.map( it => h( 'div', { style: 'margin-top:6px' }, h( 'p', { class: 'small' }, it.text ), it.source ? h( 'p', { class: 'small mut mono' }, it.source ) : null ) ) ) ) ),
-    h( 'h3', null, 'What each panel lens said is missing' ),
+    h( 'h3', null, 'What each panel lens said is missing, round 1' ), h( 'p', { class: 'small mut' }, 'The later panel’s words are on the Round 2 tab.' ),
     h( 'div', { class: 'stack' }, M.panel.map( l => h( 'details', null, h( 'summary', null, LENS_LABEL[l.lens] || l.lens, h( 'span', { class: 'small mut' }, ` · scored ${ l.n_scored } ideas · overrated: ${ l.overrated.join( ', ' ) || '–' } · underrated: ${ l.underrated.join( ', ' ) || '–' }` ) ), h( 'div', { class: 'prose', style: 'margin-top:6px' }, md( l.comments ) ),
       h( 'p', { class: 'small' }, h( 'b', null, 'Top 25: ' ), l.top.map( ( id, i ) => [ i ? ', ' : '', ideaById.has( id ) ? h( 'a', { href: '#', onclick: e => { e.preventDefault(); openIdea( id ); } }, id ) : id ] ) ),
       h( 'p', { class: 'small' }, h( 'b', null, 'Best look: ' ), l.best_look.join( ', ' ) ) ) ) ),
@@ -2739,16 +2955,16 @@ async function boot()
   for( const i of D.ideas ) ideaById.set( i.id, i );
   for( const f of D.families ) famById.set( f.family, f );
   const landedNodes = landedReal().length, kernelsMerged = D.plan.kernels_merged.length;
-  const counts = { live: D.ideas.filter( i => i.proto_ok ).length, editor: D.counts.preset_trees, catalog: D.ideas.length, compare: D.families.length, discoveries: D.counts.discoveries, plan: D.plan.n_nodes, trail: D.process.merged_ideas, notes: D.counts.notes };
+  const counts = { live: D.ideas.filter( i => i.proto_ok ).length, editor: D.counts.preset_trees, catalog: D.ideas.length, round2: D.counts.round2, compare: D.families.length, discoveries: D.counts.discoveries, plan: D.plan.n_nodes, trail: D.process.trail_ideas, notes: D.counts.notes };
   for( const a of tabs.children ) a.querySelector( '.n' ).textContent = counts[a.dataset.view];
-  $( '#brand-sub' ).textContent = `${ D.ideas.length } ideas · ${ D.counts.judged } judged · ${ D.counts.second_pass } prototyped, not judged · ${ D.plan.n_nodes } nodes planned · ${ landedNodes } landed${ kernelsMerged ? ', ' + kernelsMerged + ' kernels merged' : '' } · data ${ D.generated }`;
+  $( '#brand-sub' ).textContent = `${ D.ideas.length } ideas · ${ D.counts.judged } with critic and panel · ${ D.counts.second_pass + D.counts.round2 } panel only · ${ D.plan.n_nodes } nodes planned · ${ landedNodes } landed${ kernelsMerged ? ', ' + kernelsMerged + ' kernels merged' : '' } · data ${ D.generated }`;
   // Only the real engine knows which landed nodes it contains; views wait for this before offering a real preview.
   if( landedNodes && D.engines.real ) realReady = Engines.real().then( fn => { realEngineForDefaults = fn; for( const r of landedReal() ) r.inWasm = !!fn.findNode( r.class ); for( const r of D.plan.real ) if( isMember( r ) ) r.inWasm = true; } ).catch( e => { console.warn( 'real engine unavailable', e ); } );
   presetsReady = fetch( 'data/presets.json' ).then( r => { if( !r.ok ) throw new Error( 'presets.json ' + r.status ); return r.json(); } ).then( indexPresets ).catch( e => { console.warn( 'preset trees unavailable', e ); } );
   window.addEventListener( 'hashchange', route );
   document.addEventListener( 'keydown', e => { if( e.key === 'Escape' ) { const ov = $( '.preview.overlay' ); if( !$( '#lightbox' ).hidden ) closeLb(); else if( ov && ov._pv ) ov._pv.setDisplay( ov._pv.prevDisplay || 'fit' ); else if( !$( '#modal' ).hidden ) closeModal(); } } );
   route();
-  window.lab = { get D() { return D; }, previews, Engines, Packs, Compare, Prefs, LB, EditorHost, Ed, PR };
+  window.lab = { get D() { return D; }, previews, Engines, Packs, Compare, Prefs, LB, EditorHost, Ed, PR, openIdea };
 }
 boot();
 } )();
